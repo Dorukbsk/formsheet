@@ -1,3 +1,4 @@
+import { supabase } from './supabaseClient'
 import React, { useState, useEffect, useMemo } from "react";
 
 /* ============================================================
@@ -172,13 +173,19 @@ const KEY = "formsheet:sessions:v1";
 let memoryFallback = [];
 
 async function loadSessions() {
-  const r = localStorage.getItem(KEY);
-  return r ? JSON.parse(r) : [];
-}
-async function saveSessions(list) {
-  localStorage.setItem(KEY, JSON.stringify(list));
+  const { data, error } = await supabase
+    .from('sessions')
+    .select('payload')
+    .order('created_at', { ascending: true })
+  if (error) { console.error(error); return [] }
+  return data.map((row) => row.payload)
 }
 
+async function saveSessions(list) {
+  const newest = list[list.length - 1]
+  const { error } = await supabase.from('sessions').insert({ payload: newest })
+  if (error) console.error(error)
+}
 /* ---------- 5. STYLES -------------------------------------- */
 
 const CSS = `
@@ -200,7 +207,7 @@ const CSS = `
   gap:16px;border-bottom:2px solid var(--ink);padding-bottom:10px;flex-wrap:wrap;}
 .fs .logo{font-family:var(--cond);font-weight:700;font-size:44px;line-height:.86;
   letter-spacing:.01em;text-transform:uppercase;margin:0;}
-.fs .logo span{color:var(--accent);}
+.fs .logo span{color:var(--accent); display:inline-block; transform:skewX(-10deg);}
 .fs .tagline{font-family:var(--mono);font-size:10.5px;letter-spacing:.14em;
   text-transform:uppercase;color:var(--soft);padding-bottom:4px;}
 
@@ -366,9 +373,9 @@ export default function FormSheet() {
       <div className="wrap">
         <header className="masthead">
           <h1 className="logo">
-            Form<span>/</span>Sheet
+            Athleti<span>X</span>
           </h1>
-          <div className="tagline">Match stats · ranked · with a fix for each gap</div>
+          <div className="tagline">Know your game · fix what's costing you</div>
         </header>
 
         <nav className="tabs">
