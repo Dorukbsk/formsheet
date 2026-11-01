@@ -1,5 +1,6 @@
 import { supabase } from './supabaseClient'
 import React, { useState, useEffect, useMemo } from "react";
+import Logo from './Logo.jsx'
 
 /* ============================================================
    FORM SHEET — sport performance analyzer (starter prototype)
@@ -372,9 +373,7 @@ export default function FormSheet() {
       <style>{CSS}</style>
       <div className="wrap">
         <header className="masthead">
-          <h1 className="logo">
-            Athleti<span>X</span>
-          </h1>
+          <Logo width={230} />
           <div className="tagline">Know your game · fix what's costing you</div>
         </header>
 

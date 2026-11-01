@@ -1,4 +1,5 @@
 import React, { useState } from 'react'
+import Logo from './Logo.jsx'
 import { supabase } from './supabaseClient'
 
 const CSS = `
@@ -105,7 +106,7 @@ export default function Auth() {
     <div className="au">
       <style>{CSS}</style>
       <div className="box">
-        <h1 className="logo">Athleti<span>X</span></h1>
+       <Logo width={340} />
         <p className="tagline">Know your game · fix what's costing you</p>
 
         <div className="panel">
