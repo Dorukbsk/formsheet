@@ -1,11 +1,11 @@
-import { supabase } from './supabaseClient'
+import { supabase } from "./supabaseClient";
 import React, { useState, useEffect, useMemo } from "react";
-import Logo from './Logo.jsx'
+import Logo from "./Logo.jsx";
+import { QUICK, PLACES, DAYS, buildPlan, weekKey } from "./training.js";
 
 /* ============================================================
-   FORM SHEET — sport performance analyzer (starter prototype)
-   Single-file React app. Replace the BENCHMARKS with real data
-   from your own league/dataset when you have it.
+   AthletiX — sport performance analyzer
+   Benchmarks below are modelled placeholders, not league data.
    ============================================================ */
 
 /* ---------- 1. STAT MODEL ---------------------------------- */
@@ -168,25 +168,57 @@ function band(p) {
   return { key: "gap", label: "Priority gap" };
 }
 
-/* ---------- 4. STORAGE ------------------------------------- */
 
-const KEY = "formsheet:sessions:v1";
-let memoryFallback = [];
+/* ---------- 4. STORAGE (Supabase) -------------------------- */
 
 async function loadSessions() {
   const { data, error } = await supabase
-    .from('sessions')
-    .select('payload')
-    .order('created_at', { ascending: true })
-  if (error) { console.error(error); return [] }
-  return data.map((row) => row.payload)
+    .from("sessions")
+    .select("payload")
+    .order("created_at", { ascending: true });
+  if (error) { console.error(error); return []; }
+  return data.map((row) => row.payload);
 }
 
 async function saveSessions(list) {
-  const newest = list[list.length - 1]
-  const { error } = await supabase.from('sessions').insert({ payload: newest })
-  if (error) console.error(error)
+  const newest = list[list.length - 1];
+  const { error } = await supabase.from("sessions").insert({ payload: newest });
+  if (error) { console.error(error); return false; }
+  return true;
 }
+
+async function loadPlans() {
+  const { data, error } = await supabase.from("plans").select("payload").maybeSingle();
+  if (error) { console.error(error); return {}; }
+  return data ? data.payload : {};
+}
+
+async function savePlans(plans) {
+  const { data: s } = await supabase.auth.getSession();
+  const uid = s && s.session ? s.session.user.id : null;
+  if (!uid) return false;
+  const { error } = await supabase
+    .from("plans")
+    .upsert({ user_id: uid, payload: plans, updated_at: new Date().toISOString() }, { onConflict: "user_id" });
+  if (error) { console.error(error); return false; }
+  return true;
+}
+
+function readMode() {
+  try { return localStorage.getItem("athletix:mode") || "quick"; } catch { return "quick"; }
+}
+function writeMode(m) {
+  try { localStorage.setItem("athletix:mode", m); } catch { /* ignore */ }
+}
+
+const defaultMinutes = (sport) => (sport === "volleyball" ? "4" : sport === "basketball" ? "30" : "90");
+
+function stepFor(m) {
+  if (m.unit === "%") return 5;
+  if (m.unit === "km") return 0.5;
+  return 1;
+}
+
 /* ---------- 5. STYLES -------------------------------------- */
 
 const CSS = `
@@ -208,7 +240,7 @@ const CSS = `
   gap:16px;border-bottom:2px solid var(--ink);padding-bottom:10px;flex-wrap:wrap;}
 .fs .logo{font-family:var(--cond);font-weight:700;font-size:44px;line-height:.86;
   letter-spacing:.01em;text-transform:uppercase;margin:0;}
-.fs .logo span{color:var(--accent); display:inline-block; transform:skewX(-10deg);}
+.fs .logo span{color:var(--accent);}
 .fs .tagline{font-family:var(--mono);font-size:10.5px;letter-spacing:.14em;
   text-transform:uppercase;color:var(--soft);padding-bottom:4px;}
 
@@ -300,6 +332,47 @@ const CSS = `
   .fs .logo{font-size:34px;} .fs .stampnum{font-size:60px;}
 }
 @media (prefers-reduced-motion:reduce){ .fs .mark{transition:none;} }
+
+/* ---- quick entry ---- */
+.fs .rowhead{display:flex;align-items:flex-end;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-bottom:14px;}
+.fs .rowhead .h2{margin:0;}
+.fs .chip.sm{font-size:15px;padding:5px 12px;}
+.fs .hint{font-family:var(--mono);font-size:11px;color:var(--soft);line-height:1.6;margin:0 0 14px;}
+.fs .stepper{display:grid;grid-template-columns:40px 1fr 40px;}
+.fs .stepper input{text-align:center;border-left:0;border-right:0;}
+.fs .stepper button{font-family:var(--mono);font-size:18px;font-weight:600;background:var(--card);
+  border:1px solid var(--rule);color:var(--ink);cursor:pointer;padding:0;}
+.fs .stepper button:hover{background:var(--ink);color:var(--card);}
+.fs .stepper button:focus-visible{outline:2px solid var(--accent);outline-offset:-2px;}
+.fs .err{font-family:var(--mono);font-size:12px;color:var(--bad);border-left:3px solid var(--bad);
+  background:#fff;padding:9px 12px;margin:0 0 16px;}
+
+/* ---- training ---- */
+.fs .weekbar{display:flex;align-items:center;gap:14px;margin-bottom:18px;flex-wrap:wrap;}
+.fs .weekbar .count{font-family:var(--cond);font-size:44px;font-weight:700;line-height:.85;}
+.fs .weekbar .lbl{font-family:var(--mono);font-size:10.5px;letter-spacing:.12em;text-transform:uppercase;color:var(--soft);}
+.fs .daycard{border:1px solid var(--rule);background:#fff;padding:16px;margin-bottom:12px;}
+.fs .daycard[data-done="1"]{border-color:var(--good);background:#F1F7F3;}
+.fs .dayhead{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:10px;}
+.fs .dayname{font-family:var(--cond);font-size:24px;font-weight:700;text-transform:uppercase;}
+.fs .tag{font-family:var(--mono);font-size:9.5px;letter-spacing:.12em;text-transform:uppercase;
+  padding:3px 7px;border:1px solid var(--rule);color:var(--soft);margin-left:10px;vertical-align:middle;}
+.fs .tag[data-t="physical"]{border-color:var(--warn);color:var(--warn);}
+.fs .tag[data-t="skill"]{border-color:var(--accent);color:var(--accent);}
+.fs .donebtn{font-family:var(--cond);font-size:15px;font-weight:600;text-transform:uppercase;letter-spacing:.05em;
+  padding:6px 12px;border:1px solid var(--ink);background:transparent;color:var(--ink);cursor:pointer;white-space:nowrap;}
+.fs .donebtn[data-on="1"]{background:var(--good);border-color:var(--good);color:#fff;}
+.fs .step{font-size:13.5px;line-height:1.55;padding:7px 0;border-top:1px solid var(--rule);}
+.fs .step b{font-weight:600;}
+.fs .step .mins{font-family:var(--mono);font-size:11px;color:var(--soft);margin-left:6px;}
+.fs .step .why{font-family:var(--mono);font-size:10.5px;color:var(--accent);margin-top:2px;}
+
+@media (max-width:640px){
+  .fs .tabs{width:100%;flex-wrap:wrap;}
+  .fs .tab{flex:1 1 auto;font-size:16px;padding:7px 10px;}
+  .fs .dayhead{flex-wrap:wrap;}
+}
+.fs .go:disabled{opacity:.55;cursor:default;background:var(--accent);}
 `;
 
 /* ---------- 6. UI ------------------------------------------ */
@@ -311,34 +384,76 @@ export default function FormSheet() {
   const [level, setLevel] = useState("club");
   const [minutes, setMinutes] = useState("90");
   const [raw, setRaw] = useState({});
+  const [mode, setModeState] = useState(readMode);
+  const [prefilled, setPrefilled] = useState(false);
   const [report, setReport] = useState(null);
   const [sessions, setSessions] = useState([]);
+  const [plans, setPlans] = useState({});
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+  const [focusHint, setFocusHint] = useState(null);
+
+  function applyPrefill(sp, pos, list) {
+    const prev = [...list].reverse().find((x) => x.sport === sp && x.position === pos && x.raw);
+    if (prev) {
+      setRaw({ ...prev.raw });
+      setMinutes(String(prev.minutes));
+      setPrefilled(true);
+    } else {
+      setRaw({});
+      setMinutes(defaultMinutes(sp));
+      setPrefilled(false);
+    }
+  }
 
   useEffect(() => {
-    loadSessions().then((s) => {
+    let alive = true;
+    Promise.all([loadSessions(), loadPlans()]).then(([s, p]) => {
+      if (!alive) return;
       setSessions(s);
+      setPlans(p || {});
+      const last = s[s.length - 1];
+      if (last && SPORTS[last.sport] && SPORTS[last.sport].positions[last.position]) {
+        setSport(last.sport);
+        setPosition(last.position);
+        if (LEVELS.some((l) => l.key === last.level)) setLevel(last.level);
+        applyPrefill(last.sport, last.position, s);
+      }
       setLoading(false);
     });
+    return () => { alive = false; };
   }, []);
 
   const cfg = SPORTS[sport];
-  const activeMetrics = useMemo(
-    () => cfg.metrics.filter((m) => m.bm[position]),
-    [sport, position]
-  );
+  const allMetrics = useMemo(() => cfg.metrics.filter((m) => m.bm[position]), [cfg, position]);
+  const shownMetrics = useMemo(() => {
+    if (mode !== "quick") return allMetrics;
+    const keys = (QUICK[sport] && QUICK[sport][position]) || [];
+    const picked = keys.map((k) => allMetrics.find((m) => m.key === k)).filter(Boolean);
+    return picked.length ? picked : allMetrics;
+  }, [mode, sport, position, allMetrics]);
+
+  function setMode(m) {
+    setModeState(m);
+    writeMode(m);
+  }
 
   function switchSport(k) {
+    const pos = Object.keys(SPORTS[k].positions)[0];
     setSport(k);
-    setPosition(Object.keys(SPORTS[k].positions)[0]);
-    setRaw({});
+    setPosition(pos);
     setReport(null);
-    setMinutes(k === "volleyball" ? "4" : k === "basketball" ? "30" : "90");
+    applyPrefill(k, pos, sessions);
+  }
+
+  function switchPosition(p) {
+    setPosition(p);
+    applyPrefill(sport, p, sessions);
   }
 
   function analyse() {
     const mins = parseFloat(minutes) || cfg.window;
-    const rows = activeMetrics.map((m) => {
+    const rows = shownMetrics.map((m) => {
       const v = parseFloat(raw[m.key]);
       const value = isNaN(v) ? 0 : v;
       const per = m.rate ? (value / mins) * cfg.window : value;
@@ -346,26 +461,51 @@ export default function FormSheet() {
       return { key: m.key, label: m.label, unit: m.unit || "", per: Math.round(per * 100) / 100, pct: p, band: band(p) };
     });
     const overall = Math.round(rows.reduce((a, r) => a + r.pct, 0) / rows.length);
-    const rec = {
+    const kept = {};
+    allMetrics.forEach((m) => {
+      if (raw[m.key] !== undefined && raw[m.key] !== "") kept[m.key] = raw[m.key];
+    });
+    setReport({
       id: Date.now(),
       date: new Date().toISOString().slice(0, 10),
       sport,
       position,
       level,
       minutes: mins,
+      mode,
+      raw: kept,
       overall,
       rows,
-    };
-    setReport(rec);
+    });
     setView("report");
   }
 
   async function saveReport() {
-    if (!report) return;
-    const next = [...sessions, report];
-    setSessions(next);
-    await saveSessions(next);
+    if (!report || report.saved) return;
+    const ok = await saveSessions([...sessions, report]);
+    if (!ok) {
+      setError("Couldn't save this match. Check your connection and try again.");
+      return;
+    }
+    setError("");
+    const rec = { ...report, saved: true };
+    setReport(rec);
+    setSessions((prev) => [...prev, rec]);
+    setPrefilled(true);
     setView("progress");
+  }
+
+  async function updatePlans(next) {
+    setPlans(next);
+    const ok = await savePlans(next);
+    setError(ok ? "" : "Couldn't save your plan. Check your connection and try again.");
+  }
+
+  function planFromReport(keys) {
+    setSport(report.sport);
+    setPosition(report.position);
+    setFocusHint(keys);
+    setView("training");
   }
 
   return (
@@ -387,7 +527,12 @@ export default function FormSheet() {
           <button className="tab" data-on={view === "progress" ? 1 : 0} onClick={() => setView("progress")}>
             Progress
           </button>
+          <button className="tab" data-on={view === "training" ? 1 : 0} onClick={() => setView("training")}>
+            Training
+          </button>
         </nav>
+
+        {error && <p className="err" role="alert">{error}</p>}
 
         {view === "entry" && (
           <Entry
@@ -395,21 +540,43 @@ export default function FormSheet() {
             sport={sport}
             switchSport={switchSport}
             position={position}
-            setPosition={setPosition}
+            setPosition={switchPosition}
             level={level}
             setLevel={setLevel}
             minutes={minutes}
             setMinutes={setMinutes}
-            metrics={activeMetrics}
+            metrics={shownMetrics}
+            totalCount={allMetrics.length}
+            mode={mode}
+            setMode={setMode}
+            prefilled={prefilled}
             raw={raw}
             setRaw={setRaw}
             analyse={analyse}
           />
         )}
 
-        {view === "report" && report && <Report rec={report} cfg={SPORTS[report.sport]} onSave={saveReport} />}
+        {view === "report" && report && (
+          <Report rec={report} cfg={SPORTS[report.sport]} onSave={saveReport} onPlan={planFromReport} />
+        )}
 
         {view === "progress" && <Progress sessions={sessions} loading={loading} />}
+
+        {view === "training" && (loading ? (
+          <section className="card"><p className="empty">Loading your plan…</p></section>
+        ) : (
+          <Training
+            key={sport + position}
+            sport={sport}
+            position={position}
+            cfg={cfg}
+            sessions={sessions}
+            plans={plans}
+            onSave={updatePlans}
+            focusHint={focusHint}
+            onFocusUsed={() => setFocusHint(null)}
+          />
+        ))}
 
         <p className="note">
           Percentiles compare you against a modelled distribution for your position and level. The
@@ -421,8 +588,38 @@ export default function FormSheet() {
   );
 }
 
+function Stepper({ metric, value, onChange }) {
+  const step = stepFor(metric);
+  const max = metric.unit === "%" ? 100 : Infinity;
+  const num = parseFloat(value);
+  const cur = isNaN(num) ? 0 : num;
+  function bump(d) {
+    const n = Math.min(max, Math.max(0, Math.round((cur + d) * 100) / 100));
+    onChange(String(n));
+  }
+  return (
+    <div className="stepper">
+      <button type="button" aria-label={`Decrease ${metric.label}`} onClick={() => bump(-step)}>−</button>
+      <input
+        type="number"
+        inputMode="decimal"
+        min="0"
+        step="any"
+        placeholder="0"
+        aria-label={metric.label}
+        value={value ?? ""}
+        onChange={(e) => onChange(e.target.value)}
+      />
+      <button type="button" aria-label={`Increase ${metric.label}`} onClick={() => bump(step)}>+</button>
+    </div>
+  );
+}
+
 function Entry(props) {
-  const { cfg, sport, switchSport, position, setPosition, level, setLevel, minutes, setMinutes, metrics, raw, setRaw, analyse } = props;
+  const {
+    cfg, sport, switchSport, position, setPosition, level, setLevel, minutes, setMinutes,
+    metrics, totalCount, mode, setMode, prefilled, raw, setRaw, analyse,
+  } = props;
   return (
     <>
       <section className="card">
@@ -454,24 +651,34 @@ function Entry(props) {
 
       <section className="card">
         <p className="eyebrow">Step 2 — the match</p>
-        <h2 className="h2">Enter your totals</h2>
+        <div className="rowhead">
+          <h2 className="h2">Enter your totals</h2>
+          <div className="chipset">
+            <button className="chip sm" data-on={mode === "quick" ? 1 : 0} onClick={() => setMode("quick")}>
+              Quick
+            </button>
+            <button className="chip sm" data-on={mode === "full" ? 1 : 0} onClick={() => setMode("full")}>
+              Full · {totalCount}
+            </button>
+          </div>
+        </div>
+        <p className="hint">
+          {mode === "quick"
+            ? "Quick log: the stats that say most about your role. Switch to Full for everything."
+            : "Full log: every stat for your role."}
+          {prefilled && " Filled in from your last match — change only what's different."}
+        </p>
         <div className="grid">
           <div className="field">
             <label>{cfg.unitLabel}</label>
-            <input type="number" min="1" value={minutes} onChange={(e) => setMinutes(e.target.value)} />
+            <input type="number" inputMode="decimal" min="1" value={minutes} onChange={(e) => setMinutes(e.target.value)} />
           </div>
           {metrics.map((m) => (
             <div className="field" key={m.key}>
               <label>
                 {m.label} {m.unit ? `(${m.unit})` : `(total)`}
               </label>
-              <input
-                type="number"
-                step="any"
-                placeholder="0"
-                value={raw[m.key] ?? ""}
-                onChange={(e) => setRaw({ ...raw, [m.key]: e.target.value })}
-              />
+              <Stepper metric={m} value={raw[m.key]} onChange={(v) => setRaw({ ...raw, [m.key]: v })} />
             </div>
           ))}
         </div>
@@ -513,10 +720,11 @@ function RankRow({ r, windowLabel }) {
   );
 }
 
-function Report({ rec, cfg, onSave }) {
+function Report({ rec, cfg, onSave, onPlan }) {
   const sorted = [...rec.rows].sort((a, b) => a.pct - b.pct);
   const gaps = sorted.filter((r) => r.pct < 40).slice(0, 3);
   const strengths = [...sorted].reverse().filter((r) => r.pct >= 62).slice(0, 3);
+  const planKeys = (gaps.length ? gaps : sorted.slice(0, 2)).map((r) => r.key);
 
   return (
     <>
@@ -553,7 +761,7 @@ function Report({ rec, cfg, onSave }) {
 
       <section className="card">
         <p className="eyebrow">Work on this next</p>
-        <h2 className="h2">{gaps.length ? "Three fixes" : "No priority gaps"}</h2>
+        <h2 className="h2">{gaps.length ? "Your fixes" : "No priority gaps"}</h2>
         {gaps.length === 0 && (
           <p className="empty">Nothing fell below the 40th percentile this match. Raise the comparison level and run it again to find the next ceiling.</p>
         )}
@@ -582,9 +790,212 @@ function Report({ rec, cfg, onSave }) {
         })}
       </section>
 
-      <button className="go" onClick={onSave}>
-        Save to my record
-      </button>
+      <div className="chipset">
+        <button className="go" onClick={onSave} disabled={rec.saved}>
+          {rec.saved ? "Saved" : "Save to my record"}
+        </button>
+        <button className="go ghost" onClick={() => onPlan(planKeys)}>
+          Build a training plan
+        </button>
+      </div>
+    </>
+  );
+}
+
+function Training({ sport, position, cfg, sessions, plans, onSave, focusHint, onFocusUsed }) {
+  const plan = plans[sport];
+  const roleMetrics = cfg.metrics.filter((m) => m.bm[position]);
+  const label = (k) => (cfg.metrics.find((m) => m.key === k) || { label: k }).label;
+  const latest = [...sessions].reverse().find((s) => s.sport === sport && s.position === position);
+
+  function defaultFocus() {
+    if (focusHint && focusHint.length) return focusHint.slice(0, 3);
+    if (plan && plan.position === position) return plan.focus;
+    if (latest) return [...latest.rows].sort((a, b) => a.pct - b.pct).slice(0, 2).map((r) => r.key);
+    return [];
+  }
+
+  const [editing, setEditing] = useState(!plan || !!(focusHint && focusHint.length));
+  const [days, setDays] = useState(plan ? plan.days : 3);
+  const [mins, setMins] = useState(plan ? plan.minutes : 45);
+  const [where, setWhere] = useState(plan ? plan.where : "field");
+  const [matchDay, setMatchDay] = useState(plan ? plan.matchDay : 5);
+  const [focus, setFocus] = useState(defaultFocus);
+
+  useEffect(() => {
+    if (focusHint) onFocusUsed();
+  }, []);
+
+  function toggleFocus(k) {
+    if (focus.includes(k)) setFocus(focus.filter((x) => x !== k));
+    else if (focus.length < 3) setFocus([...focus, k]);
+  }
+
+  function create() {
+    const built = buildPlan({ sport, position, days, minutes: mins, where, matchDay, focus });
+    const startPct = {};
+    if (latest) {
+      focus.forEach((k) => {
+        const row = latest.rows.find((r) => r.key === k);
+        if (row) startPct[k] = row.pct;
+      });
+    }
+    onSave({ ...plans, [sport]: { ...built, startPct, done: {} } });
+    setEditing(false);
+  }
+
+  if (editing || !plan) {
+    const placeName = { field: PLACES.field[sport], gym: PLACES.gym, home: PLACES.home };
+    return (
+      <section className="card">
+        <p className="eyebrow">{cfg.label} · {cfg.positions[position]}</p>
+        <h2 className="h2">Build your weekly plan</h2>
+
+        <p className="eyebrow">Days per week</p>
+        <div className="chipset" style={{ marginBottom: 16 }}>
+          {[1, 2, 3, 4, 5].map((n) => (
+            <button key={n} className="chip" data-on={days === n ? 1 : 0} onClick={() => setDays(n)}>{n}</button>
+          ))}
+        </div>
+
+        <p className="eyebrow">Minutes per session</p>
+        <div className="chipset" style={{ marginBottom: 16 }}>
+          {[30, 45, 60].map((n) => (
+            <button key={n} className="chip" data-on={mins === n ? 1 : 0} onClick={() => setMins(n)}>{n}</button>
+          ))}
+        </div>
+
+        <p className="eyebrow">Where you train</p>
+        <div className="chipset" style={{ marginBottom: 16 }}>
+          {["field", "gym", "home"].map((w) => (
+            <button key={w} className="chip" data-on={where === w ? 1 : 0} onClick={() => setWhere(w)}>{placeName[w]}</button>
+          ))}
+        </div>
+
+        <p className="eyebrow">Match day</p>
+        <div className="chipset" style={{ marginBottom: 16 }}>
+          <button className="chip" data-on={matchDay === -1 ? 1 : 0} onClick={() => setMatchDay(-1)}>None</button>
+          {DAYS.map((d, i) => (
+            <button key={d} className="chip" data-on={matchDay === i ? 1 : 0} onClick={() => setMatchDay(i)}>{d}</button>
+          ))}
+        </div>
+
+        <p className="eyebrow">Focus — up to 3</p>
+        <p className="hint">
+          {latest ? "Your weakest stats from your last match are picked for you." : "Log a match first and the app picks your weakest stats for you."}
+        </p>
+        <div className="chipset" style={{ marginBottom: 20 }}>
+          {roleMetrics.map((m) => (
+            <button key={m.key} className="chip sm" data-on={focus.includes(m.key) ? 1 : 0} onClick={() => toggleFocus(m.key)}>
+              {m.label}
+            </button>
+          ))}
+        </div>
+
+        <div className="chipset">
+          <button className="go" onClick={create}>Create plan</button>
+          {plan && <button className="go ghost" onClick={() => setEditing(false)}>Cancel</button>}
+        </div>
+      </section>
+    );
+  }
+
+  const wk = weekKey();
+  const doneNow = (plan.done && plan.done[wk]) || [];
+
+  function toggleDone(i) {
+    const list = doneNow.includes(i) ? doneNow.filter((x) => x !== i) : [...doneNow, i];
+    const done = { ...(plan.done || {}), [wk]: list };
+    const keep = Object.keys(done).sort().slice(-12);
+    const trimmed = {};
+    keep.forEach((k) => { trimmed[k] = done[k]; });
+    onSave({ ...plans, [sport]: { ...plan, done: trimmed } });
+  }
+
+  const since = sessions.filter(
+    (s) => s.sport === sport && s.position === plan.position && s.id > Date.parse(plan.createdAt)
+  );
+  const now = since[since.length - 1];
+  const placeName = plan.where === "field" ? PLACES.field[sport] : PLACES[plan.where];
+
+  return (
+    <>
+      <section className="card">
+        <p className="eyebrow">
+          {cfg.label} · {cfg.positions[plan.position]} · {plan.days} {plan.days === 1 ? "day" : "days"} × {plan.minutes} min · {placeName}
+        </p>
+        <div className="weekbar">
+          <div className="count">{doneNow.length}/{plan.sessions.length}</div>
+          <div className="lbl">sessions done this week</div>
+        </div>
+        {plan.position !== position && (
+          <p className="hint">This plan was built for {cfg.positions[plan.position]}. Change the plan to rebuild it for {cfg.positions[position]}.</p>
+        )}
+        <p className="hint">
+          Rest days are part of the plan. {plan.matchDay >= 0 && `No hard training on ${DAYS[plan.matchDay]} or the day before.`}
+        </p>
+        <button className="go ghost" onClick={() => setEditing(true)}>Change plan</button>
+      </section>
+
+      {plan.sessions.map((s, i) => {
+        const done = doneNow.includes(i);
+        return (
+          <section className="daycard" key={i} data-done={done ? 1 : 0}>
+            <div className="dayhead">
+              <div>
+                <span className="dayname">{DAYS[s.day]}</span>
+                <span className="tag" data-t={s.type}>{s.type === "skill" ? "Technique" : "Fitness"}</span>
+              </div>
+              <button className="donebtn" data-on={done ? 1 : 0} onClick={() => toggleDone(i)}>
+                {done ? "Done ✓" : "Mark done"}
+              </button>
+            </div>
+            <div className="step"><b>Warm-up</b><span className="mins">10 min</span><div>{s.warmup}</div></div>
+            {s.drills.map((d) => {
+              const hits = d.metrics.filter((m) => plan.focus.includes(m));
+              return (
+                <div className="step" key={d.name}>
+                  <b>{d.name}</b><span className="mins">{d.mins} min</span>
+                  <div>{d.detail}</div>
+                  {hits.length > 0 && <div className="why">Targets: {hits.map(label).join(", ")}</div>}
+                </div>
+              );
+            })}
+            <div className="step"><b>Cool-down</b><span className="mins">5 min</span><div>{s.cooldown}</div></div>
+          </section>
+        );
+      })}
+
+      {plan.focus.length > 0 && (
+        <section className="card">
+          <p className="eyebrow">Is it working?</p>
+          <h2 className="h2">Your focus stats</h2>
+          {!now && <p className="empty">Log a match to see whether the plan is moving your numbers.</p>}
+          {now && (
+            <table>
+              <thead>
+                <tr><th>Stat</th><th>Start</th><th>Now</th><th>Change</th></tr>
+              </thead>
+              <tbody>
+                {plan.focus.map((k) => {
+                  const a = plan.startPct ? plan.startPct[k] : undefined;
+                  const row = now.rows.find((r) => r.key === k);
+                  const b = row ? row.pct : undefined;
+                  const d = a !== undefined && b !== undefined ? b - a : null;
+                  return (
+                    <tr key={k}>
+                      <td>{label(k)}</td>
+                      <td>{a !== undefined ? a : "—"}</td>
+                      <td>{b !== undefined ? b : "—"}</td>
+                      <td className={d > 0 ? "up" : d < 0 ? "down" : ""}>{d === null ? "—" : `${d > 0 ? "+" : ""}${d}`}</td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          )}
+        </section>
+      )}
     </>
   );
 }
