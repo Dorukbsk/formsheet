@@ -33,8 +33,8 @@ export default function App() {
           position: 'fixed', top: 14, right: 14, zIndex: 50,
           fontFamily: "'Barlow Condensed', sans-serif", fontSize: 15,
           fontWeight: 600, textTransform: 'uppercase', letterSpacing: '.05em',
-          padding: '5px 12px', background: '#141C26', color: '#F6F7F3',
-          border: 0, cursor: 'pointer',
+          padding: '5px 12px', background: '#0f2347', color: '#b4c3de',
+          border: '1px solid #26406e', cursor: 'pointer',
         }}
       >
         Log out

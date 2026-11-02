@@ -182,6 +182,41 @@ export function buildPlan({ sport, position, days, minutes, where, matchDay, foc
   return { sport, position, days, minutes, where, matchDay, focus, sessions, createdAt: new Date().toISOString() };
 }
 
+/* ---------- Daily tracker ---------- */
+
+export function localDay(date = new Date()) {
+  const m = String(date.getMonth() + 1).padStart(2, "0");
+  const d = String(date.getDate()).padStart(2, "0");
+  return `${date.getFullYear()}-${m}-${d}`;
+}
+
+export function addDays(day, n) {
+  const [y, m, d] = day.split("-").map(Number);
+  return localDay(new Date(y, m - 1, d + n));
+}
+
+// activity: { "2026-11-03": "train" | "match" | "rest" }
+export function streakInfo(activity, today = localDay()) {
+  let current = 0;
+  let d = activity[today] ? today : addDays(today, -1);
+  while (activity[d]) { current++; d = addDays(d, -1); }
+
+  let best = 0, run = 0, prev = null;
+  Object.keys(activity).sort().forEach((x) => {
+    run = prev && addDays(prev, 1) === x ? run + 1 : 1;
+    best = Math.max(best, run);
+    prev = x;
+  });
+  return { current, best: Math.max(best, current) };
+}
+
+export function trimActivity(activity, today = localDay()) {
+  const cutoff = addDays(today, -400);
+  const out = {};
+  Object.keys(activity).forEach((k) => { if (k >= cutoff) out[k] = activity[k]; });
+  return out;
+}
+
 /* ---------- Week key for ticking sessions off ---------- */
 
 export function weekKey(date = new Date()) {

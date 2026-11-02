@@ -3,63 +3,59 @@ import Logo from './Logo.jsx'
 import { supabase } from './supabaseClient'
 
 const CSS = `
-@import url('https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@500;600;700&family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Barlow+Condensed:ital,wght@0,600;0,700;0,800;1,800&family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600&display=swap');
 
+body{background:#07142b;margin:0;}
 .au {
-  --paper:#E3E5DF; --card:#F6F7F3; --ink:#141C26; --soft:#5D6873;
-  --rule:#C4C7BE; --accent:#1F4FD8; --bad:#AF2E22;
-  background:var(--paper); color:var(--ink);
+  --bg:#07142b; --card:#0f2347; --raise:#163262; --ink:#f2f5fa; --soft:#b4c3de;
+  --rule:#26406e; --lime:#c8ff3d; --bad:#ff6b5e; --good:#5ee08a; --on:#06122a;
+  background:var(--bg); color:var(--ink);
   font-family:'IBM Plex Sans',system-ui,sans-serif;
   min-height:100vh; display:flex; align-items:center; justify-content:center;
-  padding:24px;
+  padding:24px; -webkit-font-smoothing:antialiased;
 }
 .au *{box-sizing:border-box;}
 .au .box{width:100%; max-width:400px;}
-.au .logo{
-  font-family:'Barlow Condensed',sans-serif; font-weight:700; font-size:44px;
-  line-height:.86; text-transform:uppercase; margin:0 0 6px;
-}
-.au .logo span{color:var(--accent); display:inline-block; transform:skewX(-10deg);}
+.au .brand{display:flex;flex-direction:column;align-items:center;gap:14px;margin-bottom:22px;}
 .au .tagline{
-  font-family:'IBM Plex Mono',monospace; font-size:10.5px; letter-spacing:.14em;
-  text-transform:uppercase; color:var(--soft); margin:0 0 24px;
-  border-bottom:2px solid var(--ink); padding-bottom:14px;
+  font-family:'IBM Plex Mono',monospace; font-size:12px; letter-spacing:.12em;
+  text-transform:uppercase; color:var(--soft); text-align:center;
 }
-.au .panel{background:var(--card); border:1px solid var(--rule); padding:22px;}
+.au .sports{display:flex;gap:6px;justify-content:center;}
+.au .sports span{width:34px;height:5px;}
+.au .panel{background:var(--card); border:1px solid var(--rule); border-top:3px solid var(--lime); padding:24px;}
 .au h2{
-  font-family:'Barlow Condensed',sans-serif; font-size:26px; font-weight:700;
+  font-family:'Barlow Condensed',sans-serif; font-size:32px; font-weight:800; font-style:italic;
   text-transform:uppercase; margin:0 0 18px;
 }
 .au label{
-  display:block; font-family:'IBM Plex Mono',monospace; font-size:10px;
-  letter-spacing:.1em; text-transform:uppercase; color:var(--soft); margin-bottom:5px;
+  display:block; font-family:'IBM Plex Mono',monospace; font-size:12px; font-weight:500;
+  letter-spacing:.08em; text-transform:uppercase; color:var(--soft); margin-bottom:6px;
 }
 .au input{
-  width:100%; font-family:'IBM Plex Mono',monospace; font-size:15px;
-  padding:9px 10px; background:#fff; border:1px solid var(--rule);
-  color:var(--ink); margin-bottom:14px;
+  width:100%; font-family:'IBM Plex Mono',monospace; font-size:16px;
+  padding:10px 12px; background:var(--bg); border:1px solid var(--rule);
+  color:var(--ink); margin-bottom:16px;
 }
-.au input:focus{outline:2px solid var(--accent); outline-offset:-1px;}
+.au input:focus{outline:2px solid var(--lime); outline-offset:-1px; border-color:var(--lime);}
 .au button.go{
-  width:100%; font-family:'Barlow Condensed',sans-serif; font-size:21px;
-  font-weight:700; text-transform:uppercase; letter-spacing:.06em;
-  padding:11px; background:var(--accent); color:#fff; border:0; cursor:pointer;
+  width:100%; font-family:'Barlow Condensed',sans-serif; font-size:23px;
+  font-weight:800; font-style:italic; text-transform:uppercase; letter-spacing:.05em;
+  padding:12px; background:var(--lime); color:var(--on); border:0; cursor:pointer;
+  transition:transform .12s, filter .12s;
 }
-.au button.go:hover{background:var(--ink);}
-.au button.go:disabled{opacity:.5; cursor:wait;}
-.au .switch{
-  margin-top:16px; font-size:13px; color:var(--soft); text-align:center;
-}
+.au button.go:hover{filter:brightness(1.08); transform:translateY(-1px);}
+.au button.go:disabled{opacity:.5; cursor:wait; transform:none;}
+.au .switch{margin-top:18px; font-size:14px; color:var(--soft); text-align:center;}
 .au .switch button{
-  background:none; border:0; color:var(--accent); cursor:pointer;
-  font-size:13px; text-decoration:underline; padding:0; font-family:inherit;
+  background:none; border:0; color:var(--lime); cursor:pointer; font-weight:600;
+  font-size:14px; text-decoration:underline; padding:0; font-family:inherit;
 }
 .au .msg{
-  font-family:'IBM Plex Mono',monospace; font-size:11.5px; line-height:1.6;
-  padding:10px; margin-bottom:14px; border-left:3px solid var(--bad);
-  background:#fff; color:var(--bad);
+  font-size:14px; line-height:1.5; padding:10px 12px; margin-bottom:16px;
+  border-left:4px solid var(--bad); background:var(--bg); color:var(--bad);
 }
-.au .msg[data-ok="1"]{border-left-color:#0E6B4F; color:#0E6B4F;}
+.au .msg[data-ok="1"]{border-left-color:var(--good); color:var(--good);}
 `
 
 export default function Auth() {
@@ -82,7 +78,7 @@ export default function Auth() {
     }
 
     setBusy(true)
-        const { data, error } =
+    const { data, error } =
       mode === 'up'
         ? await supabase.auth.signUp({ email, password })
         : await supabase.auth.signInWithPassword({ email, password })
@@ -106,8 +102,15 @@ export default function Auth() {
     <div className="au">
       <style>{CSS}</style>
       <div className="box">
-       <Logo width={340} />
-        <p className="tagline">Know your game · fix what's costing you</p>
+        <div className="brand">
+          <Logo width={340} />
+          <div className="sports" aria-hidden="true">
+            <span style={{ background: '#2bd46b' }} />
+            <span style={{ background: '#ff8a2a' }} />
+            <span style={{ background: '#4aa8ff' }} />
+          </div>
+          <p className="tagline">Know your game · fix what's costing you</p>
+        </div>
 
         <div className="panel">
           <h2>{mode === 'in' ? 'Log in' : 'Create account'}</h2>
@@ -139,7 +142,7 @@ export default function Auth() {
           </button>
 
           <p className="switch">
-            {mode === 'in' ? "No account yet? " : 'Already have one? '}
+            {mode === 'in' ? 'No account yet? ' : 'Already have one? '}
             <button onClick={() => { setMode(mode === 'in' ? 'up' : 'in'); setMsg(null) }}>
               {mode === 'in' ? 'Sign up' : 'Log in'}
             </button>

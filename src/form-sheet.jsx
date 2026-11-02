@@ -1,7 +1,7 @@
 import { supabase } from "./supabaseClient";
 import React, { useState, useEffect, useMemo } from "react";
 import Logo from "./Logo.jsx";
-import { QUICK, PLACES, DAYS, buildPlan, weekKey } from "./training.js";
+import { QUICK, PLACES, DAYS, buildPlan, weekKey, localDay, addDays, streakInfo, trimActivity } from "./training.js";
 
 /* ============================================================
    AthletiX — sport performance analyzer
@@ -213,6 +213,28 @@ function writeMode(m) {
 
 const defaultMinutes = (sport) => (sport === "volleyball" ? "4" : sport === "basketball" ? "30" : "90");
 
+const SPORT_COLOR = { football: "#2bd46b", basketball: "#ff8a2a", volleyball: "#4aa8ff" };
+
+function useCountUp(target, ms = 800) {
+  const [v, setV] = useState(0);
+  useEffect(() => {
+    const reduce = typeof window !== "undefined" && window.matchMedia &&
+      window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    if (reduce || typeof requestAnimationFrame === "undefined") { setV(target); return undefined; }
+    let raf;
+    let start;
+    const tick = (t) => {
+      if (start === undefined) start = t;
+      const p = Math.min(1, (t - start) / ms);
+      setV(Math.round(target * (1 - Math.pow(1 - p, 3))));
+      if (p < 1) raf = requestAnimationFrame(tick);
+    };
+    raf = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(raf);
+  }, [target, ms]);
+  return v;
+}
+
 function stepFor(m) {
   if (m.unit === "%") return 5;
   if (m.unit === "km") return 0.5;
@@ -222,157 +244,201 @@ function stepFor(m) {
 /* ---------- 5. STYLES -------------------------------------- */
 
 const CSS = `
-@import url('https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@500;600;700&family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Barlow+Condensed:ital,wght@0,500;0,600;0,700;0,800;1,700;1,800&family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600&display=swap');
 
+body{background:#07142b;margin:0;}
 .fs {
-  --paper:#E3E5DF; --card:#F6F7F3; --ink:#141C26; --soft:#5D6873;
-  --rule:#C4C7BE; --accent:#1F4FD8; --good:#0E6B4F; --bad:#AF2E22; --warn:#9A6410;
+  --bg:#07142b; --card:#0f2347; --raise:#163262; --ink:#f2f5fa; --soft:#b4c3de;
+  --rule:#26406e; --lime:#c8ff3d; --good:#5ee08a; --warn:#ffc24a; --bad:#ff6b5e;
+  --on-sport:#06122a;
   --cond:'Barlow Condensed','Arial Narrow',Impact,sans-serif;
   --sans:'IBM Plex Sans',system-ui,sans-serif;
   --mono:'IBM Plex Mono',ui-monospace,Menlo,monospace;
-  background:var(--paper); color:var(--ink); font-family:var(--sans);
+  background:var(--bg); color:var(--ink); font-family:var(--sans);
   min-height:100vh; padding:24px 16px 64px; -webkit-font-smoothing:antialiased;
 }
 .fs *{box-sizing:border-box;}
 .fs .wrap{max-width:940px;margin:0 auto;}
 
 .fs .masthead{display:flex;align-items:flex-end;justify-content:space-between;
-  gap:16px;border-bottom:2px solid var(--ink);padding-bottom:10px;flex-wrap:wrap;}
-.fs .logo{font-family:var(--cond);font-weight:700;font-size:44px;line-height:.86;
-  letter-spacing:.01em;text-transform:uppercase;margin:0;}
-.fs .logo span{color:var(--accent);}
-.fs .tagline{font-family:var(--mono);font-size:10.5px;letter-spacing:.14em;
+  gap:16px;border-bottom:3px solid var(--sport);padding-bottom:12px;flex-wrap:wrap;}
+.fs .tagline{font-family:var(--mono);font-size:12px;letter-spacing:.12em;
   text-transform:uppercase;color:var(--soft);padding-bottom:4px;}
+.fs .mastright{display:flex;flex-direction:column;align-items:flex-end;gap:8px;}
 
-.fs .tabs{display:flex;gap:0;margin:18px 0 26px;border:1px solid var(--ink);width:fit-content;}
-.fs .tab{font-family:var(--cond);font-size:18px;font-weight:600;text-transform:uppercase;
-  letter-spacing:.05em;padding:7px 20px;background:transparent;border:0;cursor:pointer;
-  color:var(--ink);border-right:1px solid var(--ink);}
-.fs .tab:last-child{border-right:0;}
-.fs .tab[data-on="1"]{background:var(--ink);color:var(--card);}
-.fs .tab:disabled{opacity:.35;cursor:not-allowed;}
-.fs .tab:focus-visible{outline:2px solid var(--accent);outline-offset:2px;}
+.fs .streakchip{display:inline-flex;align-items:center;gap:6px;font-family:var(--cond);font-size:20px;font-weight:700;
+  font-style:italic;text-transform:uppercase;letter-spacing:.03em;padding:5px 12px;border:2px solid var(--lime);
+  color:var(--lime);background:transparent;cursor:pointer;}
+.fs .streakchip[data-zero="1"]{border-color:var(--rule);color:var(--soft);}
+.fs .flame{display:inline-block;}
+.fs .streakchip:not([data-zero="1"]) .flame{animation:flick 1.6s ease-in-out infinite;}
+@keyframes flick{0%,100%{transform:scale(1) rotate(-4deg);}50%{transform:scale(1.18) rotate(5deg);}}
 
-.fs .eyebrow{font-family:var(--mono);font-size:10px;letter-spacing:.16em;
-  text-transform:uppercase;color:var(--soft);margin:0 0 10px;}
-.fs .card{background:var(--card);border:1px solid var(--rule);padding:20px;margin-bottom:18px;}
-.fs .h2{font-family:var(--cond);font-size:26px;font-weight:700;text-transform:uppercase;
-  letter-spacing:.02em;margin:0 0 14px;}
+.fs .tabs{display:flex;gap:6px;margin:18px 0 26px;flex-wrap:wrap;}
+.fs .tab{font-family:var(--cond);font-size:19px;font-weight:700;font-style:italic;text-transform:uppercase;
+  letter-spacing:.04em;padding:8px 20px;background:var(--card);border:0;cursor:pointer;
+  color:var(--soft);transform:skewX(-8deg);}
+.fs .tab > *{display:inline-block;transform:skewX(8deg);}
+.fs .tab:hover{color:var(--ink);}
+.fs .tab[data-on="1"]{background:var(--sport);color:var(--on-sport);}
+.fs .tab:disabled{opacity:.4;cursor:not-allowed;}
+.fs .tab:focus-visible{outline:2px solid var(--lime);outline-offset:2px;}
+
+.fs .eyebrow{font-family:var(--mono);font-size:12px;letter-spacing:.12em;font-weight:500;
+  text-transform:uppercase;color:var(--sport);margin:0 0 10px;}
+.fs .card{background:var(--card);border:1px solid var(--rule);border-top:3px solid var(--sport);
+  padding:20px;margin-bottom:18px;}
+.fs .h2{font-family:var(--cond);font-size:30px;font-weight:800;font-style:italic;text-transform:uppercase;
+  letter-spacing:.02em;margin:0 0 14px;color:var(--ink);}
 
 .fs .chipset{display:flex;flex-wrap:wrap;gap:8px;}
-.fs .chip{font-family:var(--cond);font-size:17px;font-weight:600;text-transform:uppercase;
-  letter-spacing:.04em;padding:6px 14px;background:transparent;color:var(--ink);
-  border:1px solid var(--rule);cursor:pointer;}
-.fs .chip[data-on="1"]{background:var(--ink);color:var(--card);border-color:var(--ink);}
-.fs .chip:focus-visible{outline:2px solid var(--accent);outline-offset:2px;}
+.fs .chip{font-family:var(--cond);font-size:17px;font-weight:700;text-transform:uppercase;
+  letter-spacing:.04em;padding:7px 14px;background:var(--raise);color:var(--ink);
+  border:1px solid var(--rule);cursor:pointer;transition:transform .12s;}
+.fs .chip:hover{border-color:var(--sport);}
+.fs .chip:active{transform:scale(.96);}
+.fs .chip[data-on="1"]{background:var(--sport);color:var(--on-sport);border-color:var(--sport);}
+.fs .chip:focus-visible{outline:2px solid var(--lime);outline-offset:2px;}
 
 .fs .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(190px,1fr));gap:14px;}
-.fs .field label{display:block;font-family:var(--mono);font-size:10px;letter-spacing:.1em;
-  text-transform:uppercase;color:var(--soft);margin-bottom:5px;}
-.fs .field input{width:100%;font-family:var(--mono);font-size:16px;padding:8px 10px;
-  background:#fff;border:1px solid var(--rule);color:var(--ink);}
-.fs .field input:focus{outline:2px solid var(--accent);outline-offset:-1px;border-color:var(--accent);}
+.fs .field label{display:block;font-family:var(--mono);font-size:11.5px;letter-spacing:.08em;font-weight:500;
+  text-transform:uppercase;color:var(--soft);margin-bottom:6px;}
+.fs .field input{width:100%;font-family:var(--mono);font-size:17px;font-weight:600;padding:9px 10px;
+  background:var(--bg);border:1px solid var(--rule);color:var(--ink);}
+.fs .field input::placeholder{color:#6f84ab;}
+.fs .field input:focus{outline:2px solid var(--sport);outline-offset:-1px;border-color:var(--sport);}
 
-.fs .go{font-family:var(--cond);font-size:21px;font-weight:700;text-transform:uppercase;
-  letter-spacing:.06em;padding:11px 30px;background:var(--accent);color:#fff;border:0;cursor:pointer;}
-.fs .go:hover{background:var(--ink);}
-.fs .ghost{background:transparent;color:var(--ink);border:1px solid var(--ink);}
-.fs .ghost:hover{background:var(--ink);color:var(--card);}
+.fs .go{font-family:var(--cond);font-size:22px;font-weight:800;font-style:italic;text-transform:uppercase;
+  letter-spacing:.05em;padding:12px 30px;background:var(--lime);color:var(--on-sport);border:0;cursor:pointer;
+  transition:transform .12s, filter .12s;}
+.fs .go:hover{filter:brightness(1.08);transform:translateY(-1px);}
+.fs .go:active{transform:scale(.97);}
+.fs .go:disabled{opacity:.5;cursor:default;transform:none;filter:none;}
+.fs .ghost{background:transparent;color:var(--ink);border:2px solid var(--sport);}
+.fs .ghost:hover{background:var(--sport);color:var(--on-sport);}
 
-/* signature: the rank row */
 .fs .rankrow{display:grid;grid-template-columns:1.1fr 84px 1fr 62px;gap:14px;align-items:center;
   padding:13px 0;border-bottom:1px solid var(--rule);}
 .fs .rankrow:last-child{border-bottom:0;}
-.fs .rname{font-family:var(--sans);font-size:14.5px;font-weight:500;}
-.fs .rsub{font-family:var(--mono);font-size:9.5px;letter-spacing:.1em;text-transform:uppercase;color:var(--soft);}
-.fs .rval{font-family:var(--mono);font-size:15px;font-weight:600;text-align:right;}
-.fs .scale{position:relative;height:22px;border-bottom:1px solid var(--ink);}
-.fs .tick{position:absolute;bottom:0;width:1px;height:6px;background:var(--rule);}
-.fs .mark{position:absolute;bottom:0;width:3px;height:19px;background:var(--ink);
-  transition:left .55s cubic-bezier(.2,.8,.25,1);}
-.fs .mark[data-b="elite"],.fs .mark[data-b="good"]{background:var(--good);}
-.fs .mark[data-b="low"]{background:var(--warn);}
-.fs .mark[data-b="gap"]{background:var(--bad);}
-.fs .pnum{font-family:var(--cond);font-size:40px;font-weight:700;line-height:.8;text-align:right;}
+.fs .rname{font-family:var(--sans);font-size:15px;font-weight:600;}
+.fs .rsub{font-family:var(--mono);font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:var(--soft);}
+.fs .rval{font-family:var(--mono);font-size:15px;font-weight:600;text-align:right;white-space:nowrap;}
+.fs .rval .per{color:var(--soft);font-weight:400;}
+.fs .scale{position:relative;height:10px;background:var(--bg);border-radius:5px;overflow:hidden;}
+.fs .bar{position:absolute;left:0;top:0;bottom:0;border-radius:5px;background:var(--soft);}
+.fs .bar[data-b="elite"],.fs .bar[data-b="good"]{background:var(--good);}
+.fs .bar[data-b="low"]{background:var(--warn);}
+.fs .bar[data-b="gap"]{background:var(--bad);}
+.fs .pnum{font-family:var(--cond);font-size:40px;font-weight:800;font-style:italic;line-height:.8;text-align:right;}
 .fs .pnum[data-b="elite"],.fs .pnum[data-b="good"]{color:var(--good);}
 .fs .pnum[data-b="low"]{color:var(--warn);}
 .fs .pnum[data-b="gap"]{color:var(--bad);}
+.fs .pbtag{font-family:var(--mono);font-size:10px;font-weight:600;letter-spacing:.08em;background:var(--lime);
+  color:var(--on-sport);padding:2px 6px;margin-left:8px;vertical-align:2px;}
 
-.fs .stamp{display:flex;align-items:baseline;gap:14px;border:2px solid var(--ink);
-  padding:14px 20px;margin-bottom:18px;background:var(--card);}
-.fs .stampnum{font-family:var(--cond);font-size:78px;font-weight:700;line-height:.78;}
-.fs .stamptxt{font-family:var(--mono);font-size:10.5px;letter-spacing:.14em;text-transform:uppercase;color:var(--soft);}
+.fs .stamp{display:flex;align-items:center;gap:18px;background:var(--sport);color:var(--on-sport);
+  padding:16px 22px;margin-bottom:18px;}
+.fs .stampnum{font-family:var(--cond);font-size:84px;font-weight:800;font-style:italic;line-height:.8;}
+.fs .stamptxt{font-family:var(--mono);font-size:12px;font-weight:600;letter-spacing:.1em;text-transform:uppercase;}
 
-.fs .fix{border-left:3px solid var(--bad);padding:14px 0 14px 16px;margin-bottom:16px;}
-.fs .fix h4{font-family:var(--cond);font-size:22px;font-weight:700;text-transform:uppercase;margin:0 0 6px;}
-.fs .fix p{margin:0 0 10px;font-size:14px;line-height:1.55;color:var(--ink);}
+.fs .fix{border-left:4px solid var(--bad);padding:14px 0 14px 16px;margin-bottom:16px;}
+.fs .fix h4{font-family:var(--cond);font-size:23px;font-weight:800;font-style:italic;text-transform:uppercase;margin:0 0 6px;}
+.fs .fix p{margin:0 0 10px;font-size:15px;line-height:1.55;}
 .fs .fix ul{margin:0 0 12px;padding-left:18px;}
-.fs .fix li{font-size:13.5px;line-height:1.6;margin-bottom:5px;}
-.fs .watch{font-family:var(--mono);font-size:11px;letter-spacing:.06em;text-transform:uppercase;
-  color:var(--accent);text-decoration:none;border-bottom:1px solid var(--accent);}
+.fs .fix li{font-size:14.5px;line-height:1.6;margin-bottom:5px;}
+.fs .watch{font-family:var(--mono);font-size:12px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;
+  color:var(--lime);text-decoration:none;border-bottom:1px solid var(--lime);}
 
-.fs .keep{border-left:3px solid var(--good);padding:10px 0 10px 16px;margin-bottom:12px;}
-.fs .keep strong{font-family:var(--cond);font-size:20px;font-weight:700;text-transform:uppercase;}
-.fs .keep span{display:block;font-size:13.5px;color:var(--soft);margin-top:2px;}
+.fs .keep{border-left:4px solid var(--good);padding:10px 0 10px 16px;margin-bottom:12px;}
+.fs .keep strong{font-family:var(--cond);font-size:21px;font-weight:800;font-style:italic;text-transform:uppercase;}
+.fs .keep span{display:block;font-size:14.5px;color:var(--soft);margin-top:2px;}
 
-.fs table{width:100%;border-collapse:collapse;font-family:var(--mono);font-size:12.5px;}
-.fs th{text-align:left;font-size:9.5px;letter-spacing:.12em;text-transform:uppercase;
-  color:var(--soft);font-weight:500;padding:0 8px 8px 0;border-bottom:1px solid var(--ink);}
-.fs td{padding:9px 8px 9px 0;border-bottom:1px solid var(--rule);}
-.fs .up{color:var(--good);} .fs .down{color:var(--bad);}
+.fs table{width:100%;border-collapse:collapse;font-family:var(--mono);font-size:13.5px;}
+.fs th{text-align:left;font-size:11px;letter-spacing:.1em;text-transform:uppercase;
+  color:var(--soft);font-weight:500;padding:0 8px 8px 0;border-bottom:2px solid var(--sport);}
+.fs td{padding:10px 8px 10px 0;border-bottom:1px solid var(--rule);}
+.fs .up{color:var(--good);font-weight:600;} .fs .down{color:var(--bad);font-weight:600;}
 
-.fs .empty{font-family:var(--mono);font-size:12.5px;color:var(--soft);line-height:1.7;}
-.fs .note{font-family:var(--mono);font-size:10.5px;color:var(--soft);line-height:1.65;
+.fs .empty{font-family:var(--sans);font-size:15px;color:var(--soft);line-height:1.6;}
+.fs .note{font-family:var(--mono);font-size:11.5px;color:var(--soft);line-height:1.65;
   border-top:1px solid var(--rule);padding-top:12px;margin-top:22px;}
+
+.fs .rowhead{display:flex;align-items:flex-end;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-bottom:12px;}
+.fs .rowhead .h2{margin:0;}
+.fs .chip.sm{font-size:15px;padding:5px 12px;}
+.fs .hint{font-family:var(--sans);font-size:14px;color:var(--soft);line-height:1.55;margin:0 0 16px;}
+.fs .hint b{color:var(--ink);font-weight:600;}
+.fs .stepper{display:grid;grid-template-columns:42px 1fr 42px;}
+.fs .stepper input{text-align:center;border-left:0;border-right:0;}
+.fs .stepper button{font-family:var(--mono);font-size:20px;font-weight:600;background:var(--raise);
+  border:1px solid var(--rule);color:var(--ink);cursor:pointer;padding:0;}
+.fs .stepper button:hover{background:var(--sport);color:var(--on-sport);border-color:var(--sport);}
+.fs .stepper button:active{transform:scale(.94);}
+.fs .stepper button:focus-visible{outline:2px solid var(--lime);outline-offset:-2px;}
+.fs .err{font-family:var(--sans);font-size:14px;color:var(--bad);border-left:4px solid var(--bad);
+  background:var(--card);padding:10px 12px;margin:0 0 16px;}
+
+.fs .weekbar{display:flex;align-items:center;gap:14px;margin-bottom:16px;flex-wrap:wrap;}
+.fs .count{font-family:var(--cond);font-size:48px;font-weight:800;font-style:italic;line-height:.85;color:var(--sport);}
+.fs .lbl{font-family:var(--mono);font-size:12px;font-weight:500;letter-spacing:.1em;text-transform:uppercase;color:var(--soft);}
+.fs .daycard{border:1px solid var(--rule);border-left:4px solid var(--rule);background:var(--card);padding:16px;margin-bottom:12px;}
+.fs .daycard[data-done="1"]{border-left-color:var(--good);}
+.fs .dayhead{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:10px;}
+.fs .dayname{font-family:var(--cond);font-size:28px;font-weight:800;font-style:italic;text-transform:uppercase;}
+.fs .tag{font-family:var(--mono);font-size:11px;font-weight:600;letter-spacing:.08em;text-transform:uppercase;
+  padding:3px 8px;margin-left:10px;vertical-align:4px;}
+.fs .tag[data-t="physical"]{background:var(--warn);color:var(--on-sport);}
+.fs .tag[data-t="skill"]{background:var(--sport);color:var(--on-sport);}
+.fs .donebtn{font-family:var(--cond);font-size:16px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;
+  padding:7px 14px;border:2px solid var(--good);background:transparent;color:var(--good);cursor:pointer;white-space:nowrap;}
+.fs .donebtn[data-on="1"]{background:var(--good);color:var(--on-sport);}
+.fs .step{font-size:14.5px;line-height:1.55;padding:8px 0;border-top:1px solid var(--rule);}
+.fs .step b{font-weight:600;}
+.fs .step .mins{font-family:var(--mono);font-size:12px;color:var(--soft);margin-left:8px;}
+.fs .step .why{font-family:var(--mono);font-size:12px;font-weight:500;color:var(--lime);margin-top:3px;}
+
+/* ---- daily tracker ---- */
+.fs .streakrow{display:flex;align-items:flex-end;gap:28px;flex-wrap:wrap;margin-bottom:16px;}
+.fs .streaknum{font-family:var(--cond);font-size:72px;font-weight:800;font-style:italic;line-height:.8;color:var(--lime);}
+.fs .days{display:grid;grid-template-columns:repeat(14,1fr);gap:5px;margin-bottom:8px;}
+.fs .dot{aspect-ratio:1;background:var(--bg);border:1px solid var(--rule);display:flex;align-items:center;justify-content:center;
+  font-family:var(--mono);font-size:10px;color:var(--soft);}
+.fs .dot[data-k="train"]{background:var(--sport);border-color:var(--sport);color:var(--on-sport);}
+.fs .dot[data-k="match"]{background:var(--lime);border-color:var(--lime);color:var(--on-sport);}
+.fs .dot[data-k="rest"]{background:var(--raise);border-color:var(--soft);color:var(--ink);}
+.fs .dot[data-today="1"]{outline:2px solid var(--ink);outline-offset:1px;}
+.fs .legend{display:flex;gap:14px;flex-wrap:wrap;font-family:var(--mono);font-size:11.5px;color:var(--soft);margin-bottom:16px;}
+.fs .legend i{display:inline-block;width:10px;height:10px;margin-right:6px;vertical-align:-1px;}
+
+/* ---- personal best ---- */
+.fs .pb{position:relative;overflow:hidden;background:var(--lime);color:var(--on-sport);padding:18px 22px;margin-bottom:18px;
+  animation:pbin .6s cubic-bezier(.2,1.4,.4,1) both;}
+.fs .pb .big{font-family:var(--cond);font-size:34px;font-weight:800;font-style:italic;text-transform:uppercase;line-height:1;}
+.fs .pb .small{font-family:var(--mono);font-size:12px;font-weight:600;letter-spacing:.08em;text-transform:uppercase;margin-top:6px;}
+.fs .pb .shine{position:absolute;top:0;bottom:0;width:80px;left:-120px;background:rgba(255,255,255,.55);
+  transform:skewX(-20deg);animation:shine 1.4s .5s ease-out both;}
+.fs .confetti{position:absolute;inset:0;pointer-events:none;}
+.fs .confetti span{position:absolute;top:50%;left:50%;width:8px;height:12px;opacity:0;
+  animation:burst 1.1s ease-out forwards;}
+@keyframes pbin{0%{transform:scale(.6) rotate(-3deg);opacity:0;}100%{transform:scale(1) rotate(0);opacity:1;}}
+@keyframes shine{to{left:110%;}}
+@keyframes burst{0%{opacity:1;transform:translate(-50%,-50%) rotate(0);}
+  100%{opacity:0;transform:translate(calc(-50% + var(--x)),calc(-50% + var(--y))) rotate(var(--r));}}
 
 @media (max-width:640px){
   .fs .rankrow{grid-template-columns:1fr 62px 44px;grid-template-areas:"n v p" "s s s";row-gap:8px;}
   .fs .rname{grid-area:n;} .fs .rval{grid-area:v;} .fs .pnum{grid-area:p;font-size:32px;}
   .fs .scale{grid-area:s;}
-  .fs .logo{font-size:34px;} .fs .stampnum{font-size:60px;}
-}
-@media (prefers-reduced-motion:reduce){ .fs .mark{transition:none;} }
-
-/* ---- quick entry ---- */
-.fs .rowhead{display:flex;align-items:flex-end;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-bottom:14px;}
-.fs .rowhead .h2{margin:0;}
-.fs .chip.sm{font-size:15px;padding:5px 12px;}
-.fs .hint{font-family:var(--mono);font-size:11px;color:var(--soft);line-height:1.6;margin:0 0 14px;}
-.fs .stepper{display:grid;grid-template-columns:40px 1fr 40px;}
-.fs .stepper input{text-align:center;border-left:0;border-right:0;}
-.fs .stepper button{font-family:var(--mono);font-size:18px;font-weight:600;background:var(--card);
-  border:1px solid var(--rule);color:var(--ink);cursor:pointer;padding:0;}
-.fs .stepper button:hover{background:var(--ink);color:var(--card);}
-.fs .stepper button:focus-visible{outline:2px solid var(--accent);outline-offset:-2px;}
-.fs .err{font-family:var(--mono);font-size:12px;color:var(--bad);border-left:3px solid var(--bad);
-  background:#fff;padding:9px 12px;margin:0 0 16px;}
-
-/* ---- training ---- */
-.fs .weekbar{display:flex;align-items:center;gap:14px;margin-bottom:18px;flex-wrap:wrap;}
-.fs .weekbar .count{font-family:var(--cond);font-size:44px;font-weight:700;line-height:.85;}
-.fs .weekbar .lbl{font-family:var(--mono);font-size:10.5px;letter-spacing:.12em;text-transform:uppercase;color:var(--soft);}
-.fs .daycard{border:1px solid var(--rule);background:#fff;padding:16px;margin-bottom:12px;}
-.fs .daycard[data-done="1"]{border-color:var(--good);background:#F1F7F3;}
-.fs .dayhead{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:10px;}
-.fs .dayname{font-family:var(--cond);font-size:24px;font-weight:700;text-transform:uppercase;}
-.fs .tag{font-family:var(--mono);font-size:9.5px;letter-spacing:.12em;text-transform:uppercase;
-  padding:3px 7px;border:1px solid var(--rule);color:var(--soft);margin-left:10px;vertical-align:middle;}
-.fs .tag[data-t="physical"]{border-color:var(--warn);color:var(--warn);}
-.fs .tag[data-t="skill"]{border-color:var(--accent);color:var(--accent);}
-.fs .donebtn{font-family:var(--cond);font-size:15px;font-weight:600;text-transform:uppercase;letter-spacing:.05em;
-  padding:6px 12px;border:1px solid var(--ink);background:transparent;color:var(--ink);cursor:pointer;white-space:nowrap;}
-.fs .donebtn[data-on="1"]{background:var(--good);border-color:var(--good);color:#fff;}
-.fs .step{font-size:13.5px;line-height:1.55;padding:7px 0;border-top:1px solid var(--rule);}
-.fs .step b{font-weight:600;}
-.fs .step .mins{font-family:var(--mono);font-size:11px;color:var(--soft);margin-left:6px;}
-.fs .step .why{font-family:var(--mono);font-size:10.5px;color:var(--accent);margin-top:2px;}
-
-@media (max-width:640px){
-  .fs .tabs{width:100%;flex-wrap:wrap;}
-  .fs .tab{flex:1 1 auto;font-size:16px;padding:7px 10px;}
+  .fs .stampnum{font-size:64px;}
+  .fs .tab{flex:1 1 auto;font-size:16px;padding:8px 10px;}
   .fs .dayhead{flex-wrap:wrap;}
+  .fs .days{gap:3px;}
+  .fs .dot{font-size:9px;}
+  .fs .mastright{align-items:flex-start;}
 }
-.fs .go:disabled{opacity:.55;cursor:default;background:var(--accent);}
+@media (prefers-reduced-motion:reduce){
+  .fs *, .fs *::before, .fs *::after{animation:none !important;transition:none !important;}
+}
 `;
 
 /* ---------- 6. UI ------------------------------------------ */
@@ -467,7 +533,7 @@ export default function FormSheet() {
     });
     setReport({
       id: Date.now(),
-      date: new Date().toISOString().slice(0, 10),
+      date: localDay(),
       sport,
       position,
       level,
@@ -501,6 +567,21 @@ export default function FormSheet() {
     setError(ok ? "" : "Couldn't save your plan. Check your connection and try again.");
   }
 
+  const today = localDay();
+  const activity = useMemo(() => {
+    const a = { ...(plans.activity || {}) };
+    sessions.forEach((s) => { if (s.date) a[s.date] = "match"; });
+    return a;
+  }, [plans, sessions]);
+  const streak = streakInfo(activity, today);
+
+  function markDay(kind) {
+    const act = { ...(plans.activity || {}) };
+    if (act[today] === kind) delete act[today];
+    else act[today] = kind;
+    updatePlans({ ...plans, activity: trimActivity(act, today) });
+  }
+
   function planFromReport(keys) {
     setSport(report.sport);
     setPosition(report.position);
@@ -509,26 +590,34 @@ export default function FormSheet() {
   }
 
   return (
-    <div className="fs">
+    <div className="fs" style={{ "--sport": SPORT_COLOR[sport] }}>
       <style>{CSS}</style>
       <div className="wrap">
         <header className="masthead">
           <Logo width={230} />
-          <div className="tagline">Know your game · fix what's costing you</div>
+          <div className="mastright">
+            {!loading && (
+              <button className="streakchip" data-zero={streak.current ? 0 : 1} onClick={() => setView("training")}>
+                <span className="flame" aria-hidden="true">🔥</span>
+                {streak.current}-day streak
+              </button>
+            )}
+            <div className="tagline">Know your game · fix what's costing you</div>
+          </div>
         </header>
 
         <nav className="tabs">
           <button className="tab" data-on={view === "entry" ? 1 : 0} onClick={() => setView("entry")}>
-            Log a match
+            <span>Log a match</span>
           </button>
           <button className="tab" data-on={view === "report" ? 1 : 0} disabled={!report} onClick={() => setView("report")}>
-            Report
+            <span>Report</span>
           </button>
           <button className="tab" data-on={view === "progress" ? 1 : 0} onClick={() => setView("progress")}>
-            Progress
+            <span>Progress</span>
           </button>
           <button className="tab" data-on={view === "training" ? 1 : 0} onClick={() => setView("training")}>
-            Training
+            <span>Training</span>
           </button>
         </nav>
 
@@ -547,6 +636,7 @@ export default function FormSheet() {
             setMinutes={setMinutes}
             metrics={shownMetrics}
             totalCount={allMetrics.length}
+            quickCount={((QUICK[sport] && QUICK[sport][position]) || []).length}
             mode={mode}
             setMode={setMode}
             prefilled={prefilled}
@@ -557,14 +647,15 @@ export default function FormSheet() {
         )}
 
         {view === "report" && report && (
-          <Report rec={report} cfg={SPORTS[report.sport]} onSave={saveReport} onPlan={planFromReport} />
+          <Report rec={report} cfg={SPORTS[report.sport]} sessions={sessions} onSave={saveReport} onPlan={planFromReport} />
         )}
 
         {view === "progress" && <Progress sessions={sessions} loading={loading} />}
 
         {view === "training" && (loading ? (
           <section className="card"><p className="empty">Loading your plan…</p></section>
-        ) : (
+        ) : (<>
+          <Tracker activity={activity} today={today} streak={streak} onMark={markDay} />
           <Training
             key={sport + position}
             sport={sport}
@@ -576,7 +667,7 @@ export default function FormSheet() {
             focusHint={focusHint}
             onFocusUsed={() => setFocusHint(null)}
           />
-        ))}
+        </>))}
 
         <p className="note">
           Percentiles compare you against a modelled distribution for your position and level. The
@@ -618,8 +709,9 @@ function Stepper({ metric, value, onChange }) {
 function Entry(props) {
   const {
     cfg, sport, switchSport, position, setPosition, level, setLevel, minutes, setMinutes,
-    metrics, totalCount, mode, setMode, prefilled, raw, setRaw, analyse,
+    metrics, totalCount, quickCount, mode, setMode, prefilled, raw, setRaw, analyse,
   } = props;
+  const canToggle = totalCount > quickCount;
   return (
     <>
       <section className="card">
@@ -653,20 +745,24 @@ function Entry(props) {
         <p className="eyebrow">Step 2 — the match</p>
         <div className="rowhead">
           <h2 className="h2">Enter your totals</h2>
-          <div className="chipset">
-            <button className="chip sm" data-on={mode === "quick" ? 1 : 0} onClick={() => setMode("quick")}>
-              Quick
-            </button>
-            <button className="chip sm" data-on={mode === "full" ? 1 : 0} onClick={() => setMode("full")}>
-              Full · {totalCount}
-            </button>
-          </div>
+          {canToggle && (
+            <div className="chipset">
+              <button className="chip sm" data-on={mode === "quick" ? 1 : 0} onClick={() => setMode("quick")}>
+                Quick
+              </button>
+              <button className="chip sm" data-on={mode === "full" ? 1 : 0} onClick={() => setMode("full")}>
+                Full · {totalCount}
+              </button>
+            </div>
+          )}
         </div>
         <p className="hint">
-          {mode === "quick"
-            ? "Quick log: the stats that say most about your role. Switch to Full for everything."
-            : "Full log: every stat for your role."}
-          {prefilled && " Filled in from your last match — change only what's different."}
+          {canToggle
+            ? mode === "quick"
+              ? <><b>Quick log:</b> the stats that matter most for your role. Tap Full for everything.</>
+              : <><b>Full log:</b> every stat for your role.</>
+            : <><b>Your stats</b> for this role.</>}
+          {prefilled && <> Filled in from your last match, so change only what's different.</>}
         </p>
         <div className="grid">
           <div className="field">
@@ -690,37 +786,80 @@ function Entry(props) {
   );
 }
 
-function RankRow({ r, windowLabel }) {
-  const [w, setW] = useState(0);
-  useEffect(() => {
-    const t = setTimeout(() => setW(r.pct), 40);
-    return () => clearTimeout(t);
-  }, [r.pct]);
+function RankRow({ r, windowLabel, pb }) {
+  const n = useCountUp(r.pct);
   return (
     <div className="rankrow">
       <div>
-        <div className="rname">{r.label}</div>
+        <div className="rname">
+          {r.label}
+          {pb && <span className="pbtag">PB</span>}
+        </div>
         <div className="rsub">{r.band.label}</div>
       </div>
       <div className="rval">
         {r.per}
         {r.unit || ""}
-        {!r.unit && <span style={{ opacity: 0.45 }}> {windowLabel}</span>}
+        {!r.unit && <span className="per"> {windowLabel}</span>}
       </div>
       <div className="scale">
-        {[25, 50, 75].map((t) => (
-          <span key={t} className="tick" style={{ left: `${t}%` }} />
-        ))}
-        <span className="mark" data-b={r.band.key} style={{ left: `${w}%` }} />
+        <span className="bar" data-b={r.band.key} style={{ width: `${n}%` }} />
       </div>
       <div className="pnum" data-b={r.band.key}>
-        {r.pct}
+        {n}
       </div>
     </div>
   );
 }
 
-function Report({ rec, cfg, onSave, onPlan }) {
+function CountNum({ value }) {
+  return <>{useCountUp(value)}</>;
+}
+
+const CONFETTI = Array.from({ length: 28 }, (_, i) => {
+  const ang = (i / 28) * Math.PI * 2;
+  const dist = 140 + (i % 4) * 45;
+  return {
+    x: `${Math.round(Math.cos(ang) * dist * 1.6)}px`,
+    y: `${Math.round(Math.sin(ang) * dist * 0.6)}px`,
+    r: `${(i % 2 ? 1 : -1) * (180 + i * 23)}deg`,
+    c: ["#06122a", "#ffffff", "#ff8a2a", "#4aa8ff"][i % 4],
+    d: `${(i % 5) * 40}ms`,
+  };
+});
+
+function PersonalBest({ bests }) {
+  const top = bests[0];
+  return (
+    <div className="pb" role="status">
+      <div className="confetti" aria-hidden="true">
+        {CONFETTI.map((c, i) => (
+          <span key={i} style={{ background: c.c, animationDelay: c.d, "--x": c.x, "--y": c.y, "--r": c.r }} />
+        ))}
+      </div>
+      <div className="shine" aria-hidden="true" />
+      <div className="big">New best: {top.label} {top.pct}</div>
+      <div className="small">
+        Up from {top.prev}
+        {bests.length > 1 && ` · plus ${bests.length - 1} more personal best${bests.length > 2 ? "s" : ""}`}
+      </div>
+    </div>
+  );
+}
+
+function Report({ rec, cfg, sessions, onSave, onPlan }) {
+  const prevBest = {};
+  sessions.forEach((s) => {
+    if (s.id === rec.id || s.sport !== rec.sport || s.position !== rec.position) return;
+    s.rows.forEach((r) => {
+      if (prevBest[r.key] === undefined || r.pct > prevBest[r.key]) prevBest[r.key] = r.pct;
+    });
+  });
+  const bests = rec.rows
+    .filter((r) => prevBest[r.key] !== undefined && r.pct > prevBest[r.key])
+    .map((r) => ({ key: r.key, label: r.label, pct: r.pct, prev: prevBest[r.key] }))
+    .sort((a, b) => (b.pct - b.prev) - (a.pct - a.prev));
+  const pbKeys = new Set(bests.map((b) => b.key));
   const sorted = [...rec.rows].sort((a, b) => a.pct - b.pct);
   const gaps = sorted.filter((r) => r.pct < 40).slice(0, 3);
   const strengths = [...sorted].reverse().filter((r) => r.pct >= 62).slice(0, 3);
@@ -728,8 +867,10 @@ function Report({ rec, cfg, onSave, onPlan }) {
 
   return (
     <>
+      {bests.length > 0 && <PersonalBest key={rec.id} bests={bests} />}
+
       <div className="stamp">
-        <div className="stampnum">{rec.overall}</div>
+        <div className="stampnum"><CountNum value={rec.overall} /></div>
         <div>
           <div className="stamptxt">Overall rank vs {LEVELS.find((l) => l.key === rec.level).label} {cfg.positions[rec.position]}</div>
           <div className="stamptxt" style={{ marginTop: 4 }}>
@@ -742,7 +883,7 @@ function Report({ rec, cfg, onSave, onPlan }) {
         <p className="eyebrow">Every metric, ranked 1–99</p>
         <h2 className="h2">The sheet</h2>
         {rec.rows.map((r) => (
-          <RankRow key={r.key} r={r} windowLabel={cfg.windowLabel} />
+          <RankRow key={r.key} r={r} windowLabel={cfg.windowLabel} pb={pbKeys.has(r.key)} />
         ))}
       </section>
 
@@ -909,7 +1050,10 @@ function Training({ sport, position, cfg, sessions, plans, onSave, focusHint, on
     const keep = Object.keys(done).sort().slice(-12);
     const trimmed = {};
     keep.forEach((k) => { trimmed[k] = done[k]; });
-    onSave({ ...plans, [sport]: { ...plan, done: trimmed } });
+    const act = { ...(plans.activity || {}) };
+    const day = localDay();
+    if (!doneNow.includes(i) && !act[day]) act[day] = "train";
+    onSave({ ...plans, activity: trimActivity(act, day), [sport]: { ...plan, done: trimmed } });
   }
 
   const since = sessions.filter(
@@ -1000,6 +1144,49 @@ function Training({ sport, position, cfg, sessions, plans, onSave, focusHint, on
   );
 }
 
+function Tracker({ activity, today, streak, onMark }) {
+  const days = Array.from({ length: 14 }, (_, i) => addDays(today, i - 13));
+  const t = activity[today];
+  return (
+    <section className="card">
+      <p className="eyebrow">Daily tracker</p>
+      <div className="streakrow">
+        <div>
+          <div className="streaknum"><CountNum value={streak.current} /></div>
+          <div className="lbl">day streak</div>
+        </div>
+        <div>
+          <div className="count">{streak.best}</div>
+          <div className="lbl">best streak</div>
+        </div>
+      </div>
+      <div className="days">
+        {days.map((d) => (
+          <div key={d} className="dot" data-k={activity[d] || ""} data-today={d === today ? 1 : 0} title={d}>
+            {Number(d.slice(8))}
+          </div>
+        ))}
+      </div>
+      <div className="legend">
+        <span><i style={{ background: "var(--sport)" }} />Trained</span>
+        <span><i style={{ background: "var(--lime)" }} />Match</span>
+        <span><i style={{ background: "var(--raise)", border: "1px solid var(--soft)" }} />Rest day</span>
+      </div>
+      <p className="hint">
+        {t === "match"
+          ? <><b>Match logged today.</b> Your streak is safe.</>
+          : <><b>Today:</b> log training or a rest day to keep your streak. Rest days count, because recovery is part of getting better.</>}
+      </p>
+      {t !== "match" && (
+        <div className="chipset">
+          <button className="chip" data-on={t === "train" ? 1 : 0} onClick={() => onMark("train")}>I trained today</button>
+          <button className="chip" data-on={t === "rest" ? 1 : 0} onClick={() => onMark("rest")}>Rest day</button>
+        </div>
+      )}
+    </section>
+  );
+}
+
 function Progress({ sessions, loading }) {
   if (loading) return <section className="card"><p className="empty">Loading your record…</p></section>;
   if (!sessions.length)
@@ -1042,13 +1229,13 @@ function Progress({ sessions, loading }) {
         <svg viewBox={`0 0 ${W} ${H}`} width="100%" role="img" aria-label="Overall rank over time">
           {[25, 50, 75].map((g) => (
             <g key={g}>
-              <line x1={PAD} x2={W - PAD} y1={Y(g)} y2={Y(g)} stroke="#C4C7BE" strokeWidth="1" strokeDasharray="3 4" />
-              <text x={4} y={Y(g) + 4} fontSize="11" fill="#5D6873" fontFamily="IBM Plex Mono, monospace">{g}</text>
+              <line x1={PAD} x2={W - PAD} y1={Y(g)} y2={Y(g)} stroke="#26406e" strokeWidth="1" strokeDasharray="3 4" />
+              <text x={4} y={Y(g) + 4} fontSize="11" fill="#b4c3de" fontFamily="IBM Plex Mono, monospace">{g}</text>
             </g>
           ))}
-          <path d={line} fill="none" stroke="#1F4FD8" strokeWidth="2.5" />
+          <path d={line} fill="none" stroke="#c8ff3d" strokeWidth="3" />
           {pts.map((p, i) => (
-            <circle key={i} cx={X(i)} cy={Y(p.y)} r="4.5" fill="#141C26" />
+            <circle key={i} cx={X(i)} cy={Y(p.y)} r="5" fill="#07142b" stroke="#c8ff3d" strokeWidth="2" />
           ))}
         </svg>
       </section>
