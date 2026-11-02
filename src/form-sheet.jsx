@@ -2,6 +2,7 @@ import { supabase } from "./supabaseClient";
 import React, { useState, useEffect, useMemo } from "react";
 import Logo from "./Logo.jsx";
 import { QUICK, PLACES, DAYS, buildPlan, weekKey, localDay, addDays, streakInfo, trimActivity } from "./training.js";
+import { buildCard, cardSvg, svgDataUrl, saveCardImage, RECENT } from "./card.js";
 
 /* ============================================================
    AthletiX — sport performance analyzer
@@ -255,7 +256,7 @@ body{background:#07142b;margin:0;}
   --sans:'IBM Plex Sans',system-ui,sans-serif;
   --mono:'IBM Plex Mono',ui-monospace,Menlo,monospace;
   background:var(--bg); color:var(--ink); font-family:var(--sans);
-  min-height:100vh; padding:24px 16px 64px; -webkit-font-smoothing:antialiased;
+  min-height:100vh; padding:max(24px, env(safe-area-inset-top)) 16px 64px; -webkit-font-smoothing:antialiased;
 }
 .fs *{box-sizing:border-box;}
 .fs .wrap{max-width:940px;margin:0 auto;}
@@ -425,7 +426,26 @@ body{background:#07142b;margin:0;}
 @keyframes burst{0%{opacity:1;transform:translate(-50%,-50%) rotate(0);}
   100%{opacity:0;transform:translate(calc(-50% + var(--x)),calc(-50% + var(--y))) rotate(var(--r));}}
 
+/* ---- player card + install ---- */
+.fs .cardgrid{display:grid;grid-template-columns:minmax(0,340px) minmax(0,1fr);gap:28px;align-items:start;}
+.fs .cardimg{width:100%;max-width:340px;display:block;animation:cardin .7s cubic-bezier(.2,1.3,.4,1) both;}
+@keyframes cardin{0%{transform:perspective(800px) rotateY(-70deg) scale(.85);opacity:0;}100%{transform:none;opacity:1;}}
+.fs .attr{display:grid;grid-template-columns:44px 1fr 44px;gap:10px;align-items:center;padding:8px 0;border-bottom:1px solid var(--rule);}
+.fs .attr b{font-family:var(--cond);font-size:28px;font-weight:800;font-style:italic;color:var(--ink);}
+.fs .attr span{font-size:15px;}
+.fs .attr em{font-family:var(--mono);font-size:13px;font-style:normal;font-weight:600;text-align:right;}
+.fs .namefield{margin:16px 0;}
+.fs .namefield input{max-width:340px;}
+.fs .installbtn{font-family:var(--cond);font-size:16px;font-weight:700;text-transform:uppercase;letter-spacing:.04em;
+  padding:5px 12px;background:var(--sport);color:var(--on-sport);border:0;cursor:pointer;}
+.fs .ioshint{display:flex;align-items:center;justify-content:space-between;gap:12px;background:var(--card);
+  border:1px solid var(--rule);border-left:4px solid var(--lime);padding:10px 12px;margin:14px 0 0;font-size:14px;color:var(--soft);}
+.fs .ioshint b{color:var(--ink);}
+.fs .ioshint button{background:none;border:0;color:var(--soft);font-size:20px;cursor:pointer;padding:0 4px;}
+
 @media (max-width:640px){
+  .fs .cardgrid{grid-template-columns:1fr;}
+  .fs .cardimg{margin:0 auto;}
   .fs .rankrow{grid-template-columns:1fr 62px 44px;grid-template-areas:"n v p" "s s s";row-gap:8px;}
   .fs .rname{grid-area:n;} .fs .rval{grid-area:v;} .fs .pnum{grid-area:p;font-size:32px;}
   .fs .scale{grid-area:s;}
@@ -602,9 +622,11 @@ export default function FormSheet() {
                 {streak.current}-day streak
               </button>
             )}
+            <InstallButton />
             <div className="tagline">Know your game · fix what's costing you</div>
           </div>
         </header>
+        <IosHint />
 
         <nav className="tabs">
           <button className="tab" data-on={view === "entry" ? 1 : 0} onClick={() => setView("entry")}>
@@ -615,6 +637,9 @@ export default function FormSheet() {
           </button>
           <button className="tab" data-on={view === "progress" ? 1 : 0} onClick={() => setView("progress")}>
             <span>Progress</span>
+          </button>
+          <button className="tab" data-on={view === "card" ? 1 : 0} onClick={() => setView("card")}>
+            <span>My card</span>
           </button>
           <button className="tab" data-on={view === "training" ? 1 : 0} onClick={() => setView("training")}>
             <span>Training</span>
@@ -651,6 +676,12 @@ export default function FormSheet() {
         )}
 
         {view === "progress" && <Progress sessions={sessions} loading={loading} />}
+
+        {view === "card" && (loading ? (
+          <section className="card"><p className="empty">Loading your card…</p></section>
+        ) : (
+          <CardView key={sport} sport={sport} sessions={sessions} plans={plans} onSave={updatePlans} goLog={() => setView("entry")} />
+        ))}
 
         {view === "training" && (loading ? (
           <section className="card"><p className="empty">Loading your plan…</p></section>
@@ -1141,6 +1172,134 @@ function Training({ sport, position, cfg, sessions, plans, onSave, focusHint, on
         </section>
       )}
     </>
+  );
+}
+
+function InstallButton() {
+  const [evt, setEvt] = useState(null);
+  useEffect(() => {
+    const onPrompt = (e) => { e.preventDefault(); setEvt(e); };
+    const onDone = () => setEvt(null);
+    window.addEventListener("beforeinstallprompt", onPrompt);
+    window.addEventListener("appinstalled", onDone);
+    return () => {
+      window.removeEventListener("beforeinstallprompt", onPrompt);
+      window.removeEventListener("appinstalled", onDone);
+    };
+  }, []);
+  if (!evt) return null;
+  return (
+    <button className="installbtn" onClick={async () => { evt.prompt(); await evt.userChoice; setEvt(null); }}>
+      Install app
+    </button>
+  );
+}
+
+function IosHint() {
+  const [show, setShow] = useState(() => {
+    try {
+      const ua = navigator.userAgent || "";
+      const ios = /iPhone|iPad|iPod/.test(ua) || (ua.includes("Mac") && navigator.maxTouchPoints > 1);
+      const installed = window.navigator.standalone === true ||
+        (window.matchMedia && window.matchMedia("(display-mode: standalone)").matches);
+      return ios && !installed && localStorage.getItem("athletix:ioshint") !== "off";
+    } catch { return false; }
+  });
+  if (!show) return null;
+  return (
+    <div className="ioshint">
+      <span><b>Get the app:</b> tap the Share button, then <b>Add to Home Screen</b>.</span>
+      <button aria-label="Dismiss" onClick={() => { try { localStorage.setItem("athletix:ioshint", "off"); } catch { /* ignore */ } setShow(false); }}>×</button>
+    </div>
+  );
+}
+
+function CardView({ sport, sessions, plans, onSave, goLog }) {
+  const cfg = SPORTS[sport];
+  const card = buildCard(sessions, sport);
+  const saved = (plans.profile && plans.profile.name) || "";
+  const [name, setName] = useState(saved);
+  const [status, setStatus] = useState("");
+
+  if (!card) {
+    return (
+      <section className="card">
+        <p className="eyebrow">My card</p>
+        <h2 className="h2">Unlock your {cfg.label} card</h2>
+        <p className="hint">Log and save one {cfg.label.toLowerCase()} match and your player card appears here, rated from your real stats.</p>
+        <button className="go" onClick={goLog}>Log a match</button>
+      </section>
+    );
+  }
+
+  const svg = cardSvg(card, {
+    name: name.trim() || "Player",
+    positionLabel: cfg.positions[card.position],
+    sportLabel: cfg.label,
+    sportColor: SPORT_COLOR[sport],
+  });
+
+  function saveName() {
+    const n = name.trim().slice(0, 16);
+    if (n === saved) return;
+    onSave({ ...plans, profile: { ...(plans.profile || {}), name: n } });
+  }
+
+  async function share() {
+    setStatus("");
+    try {
+      const r = await saveCardImage(svg, `athletix-${sport}-card.png`);
+      setStatus(r === "downloaded" ? "Saved to your downloads." : r === "shared" ? "Shared." : "");
+    } catch {
+      setStatus("Couldn't create the image. Try again.");
+    }
+  }
+
+  return (
+    <section className="card">
+      <p className="eyebrow">My card · {cfg.label} · last {Math.min(card.matches, RECENT)} {Math.min(card.matches, RECENT) === 1 ? "match" : "matches"}</p>
+      <div className="cardgrid">
+        <div>
+          <img className="cardimg" src={svgDataUrl(svg)} alt={`Player card: overall ${card.overall}, ${cfg.positions[card.position]}`} />
+        </div>
+        <div>
+          <h2 className="h2">Overall {card.overall}</h2>
+          <p className="hint">
+            {card.delta === null
+              ? <>Your card updates every time you save a match.</>
+              : card.delta > 0
+                ? <><b>Up {card.delta}</b> since your last match. Keep it going.</>
+                : card.delta < 0
+                  ? <><b>Down {Math.abs(card.delta)}</b> since your last match. One good game turns it around.</>
+                  : <><b>No change</b> since your last match.</>}
+            {" "}{card.tier === "gold" ? "Gold card." : card.tier === "silver" ? `Silver card. Gold starts at 75.` : `Bronze card. Silver starts at 65.`}
+          </p>
+          {card.attrs.map((a) => (
+            <div className="attr" key={a.code}>
+              <b>{a.rating}</b>
+              <span>{a.label}</span>
+              <em className={a.delta > 0 ? "up" : a.delta < 0 ? "down" : ""}>
+                {a.delta === undefined || a.delta === 0 ? "" : `${a.delta > 0 ? "+" : ""}${a.delta}`}
+              </em>
+            </div>
+          ))}
+          <div className="field namefield">
+            <label htmlFor="card-name">Name on card</label>
+            <input
+              id="card-name"
+              maxLength={16}
+              placeholder="Your name"
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              onBlur={saveName}
+              onKeyDown={(e) => { if (e.key === "Enter") e.currentTarget.blur(); }}
+            />
+          </div>
+          <button className="go" onClick={share}>Save or share card</button>
+          {status && <p className="hint" style={{ marginTop: 12 }}>{status}</p>}
+        </div>
+      </div>
+    </section>
   );
 }
 

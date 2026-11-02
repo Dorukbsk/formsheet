@@ -12,7 +12,7 @@ body{background:#07142b;margin:0;}
   background:var(--bg); color:var(--ink);
   font-family:'IBM Plex Sans',system-ui,sans-serif;
   min-height:100vh; display:flex; align-items:center; justify-content:center;
-  padding:24px; -webkit-font-smoothing:antialiased;
+  padding:max(24px, env(safe-area-inset-top)) 24px 24px; -webkit-font-smoothing:antialiased;
 }
 .au *{box-sizing:border-box;}
 .au .box{width:100%; max-width:400px;}

@@ -30,7 +30,7 @@ export default function App() {
       <button
         onClick={() => supabase.auth.signOut()}
         style={{
-          position: 'fixed', top: 14, right: 14, zIndex: 50,
+          position: 'fixed', top: 'max(14px, env(safe-area-inset-top))', right: 14, zIndex: 50,
           fontFamily: "'Barlow Condensed', sans-serif", fontSize: 15,
           fontWeight: 600, textTransform: 'uppercase', letterSpacing: '.05em',
           padding: '5px 12px', background: '#0f2347', color: '#b4c3de',
