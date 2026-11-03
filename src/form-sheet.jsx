@@ -3,6 +3,7 @@ import React, { useState, useEffect, useMemo } from "react";
 import Logo from "./Logo.jsx";
 import { QUICK, PLACES, DAYS, buildPlan, weekKey, localDay, addDays, streakInfo, trimActivity } from "./training.js";
 import { buildCard, cardSvg, svgDataUrl, saveCardImage, RECENT } from "./card.js";
+import Technique from "./Technique.jsx";
 
 /* ============================================================
    AthletiX — sport performance analyzer
@@ -426,6 +427,24 @@ body{background:#07142b;margin:0;}
 @keyframes burst{0%{opacity:1;transform:translate(-50%,-50%) rotate(0);}
   100%{opacity:0;transform:translate(calc(-50% + var(--x)),calc(-50% + var(--y))) rotate(var(--r));}}
 
+/* ---- technique check ---- */
+.fs .tips{margin:0 0 14px;padding-left:20px;}
+.fs .tips li{font-size:15px;line-height:1.6;}
+.fs .techgrid{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:24px;align-items:start;}
+.fs .techimg{width:100%;display:block;border:2px solid var(--sport);}
+.fs .tcheck{border-left:4px solid var(--good);background:var(--bg);padding:12px 14px;margin-bottom:12px;}
+.fs .tcheck[data-s="work"]{border-left-color:var(--warn);}
+.fs .tchead{display:flex;justify-content:space-between;align-items:center;gap:10px;}
+.fs .tstat{font-family:var(--mono);font-size:11px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;
+  padding:3px 8px;white-space:nowrap;background:var(--good);color:var(--on-sport);}
+.fs .tstat[data-s="work"]{background:var(--warn);}
+.fs .tclabel{font-family:var(--cond);font-size:22px;font-weight:800;font-style:italic;text-transform:uppercase;}
+.fs .tcval{font-family:var(--cond);font-size:36px;font-weight:800;font-style:italic;margin:2px 0 4px;}
+.fs .tcval span{font-family:var(--mono);font-size:12px;font-style:normal;font-weight:500;color:var(--soft);margin-left:8px;}
+.fs .tcheck p{margin:6px 0 0;font-size:14.5px;line-height:1.55;}
+.fs .tcheck .drill{color:var(--lime);}
+.fs .tcheck .drill b{color:var(--lime);}
+
 /* ---- player card + install ---- */
 .fs .cardgrid{display:grid;grid-template-columns:minmax(0,340px) minmax(0,1fr);gap:28px;align-items:start;}
 .fs .cardimg{width:100%;max-width:340px;display:block;animation:cardin .7s cubic-bezier(.2,1.3,.4,1) both;}
@@ -445,6 +464,7 @@ body{background:#07142b;margin:0;}
 
 @media (max-width:640px){
   .fs .cardgrid{grid-template-columns:1fr;}
+  .fs .techgrid{grid-template-columns:1fr;}
   .fs .cardimg{margin:0 auto;}
   .fs .rankrow{grid-template-columns:1fr 62px 44px;grid-template-areas:"n v p" "s s s";row-gap:8px;}
   .fs .rname{grid-area:n;} .fs .rval{grid-area:v;} .fs .pnum{grid-area:p;font-size:32px;}
@@ -641,6 +661,9 @@ export default function FormSheet() {
           <button className="tab" data-on={view === "card" ? 1 : 0} onClick={() => setView("card")}>
             <span>My card</span>
           </button>
+          <button className="tab" data-on={view === "technique" ? 1 : 0} onClick={() => setView("technique")}>
+            <span>Technique</span>
+          </button>
           <button className="tab" data-on={view === "training" ? 1 : 0} onClick={() => setView("training")}>
             <span>Training</span>
           </button>
@@ -676,6 +699,10 @@ export default function FormSheet() {
         )}
 
         {view === "progress" && <Progress sessions={sessions} loading={loading} />}
+
+        {view === "technique" && (
+          <Technique sport={sport} sports={SPORTS} sportColor={SPORT_COLOR[sport]} onSport={switchSport} />
+        )}
 
         {view === "card" && (loading ? (
           <section className="card"><p className="empty">Loading your card…</p></section>
