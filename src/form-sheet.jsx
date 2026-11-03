@@ -2,8 +2,9 @@ import { supabase } from "./supabaseClient";
 import React, { useState, useEffect, useMemo } from "react";
 import Logo from "./Logo.jsx";
 import { QUICK, PLACES, DAYS, buildPlan, weekKey, localDay, addDays, streakInfo, trimActivity } from "./training.js";
-import { buildCard, cardSvg, svgDataUrl, saveCardImage, RECENT } from "./card.js";
+import { buildCard, cardSvg, svgDataUrl, saveCardImage, RECENT, matchRating, ratingBand, pctBand, BAND_COLOR } from "./card.js";
 import Technique from "./Technique.jsx";
+import Icon from "./icons.jsx";
 
 /* ============================================================
    AthletiX — sport performance analyzer
@@ -215,8 +216,7 @@ function writeMode(m) {
 
 const defaultMinutes = (sport) => (sport === "volleyball" ? "4" : sport === "basketball" ? "30" : "90");
 
-const SPORT_COLOR = { football: "#2bd46b", basketball: "#ff8a2a", volleyball: "#4aa8ff" };
-const SPORT_ICON = { football: "⚽", basketball: "🏀", volleyball: "🏐" };
+const SPORT_COLOR = { football: "#2dd4bf", basketball: "#fb923c", volleyball: "#60a5fa" };
 
 function ordinal(n) {
   const v = n % 100;
@@ -260,251 +260,255 @@ function stepFor(m) {
 /* ---------- 5. STYLES -------------------------------------- */
 
 const CSS = `
-@import url('https://fonts.googleapis.com/css2?family=Barlow+Condensed:ital,wght@0,500;0,600;0,700;0,800;1,700;1,800&family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Barlow+Condensed:wght@700&display=swap');
 
-body{background:#07142b;margin:0;}
+body{background:#0b0d10;margin:0;}
 .fs {
-  --bg:#07142b; --card:#0f2347; --raise:#163262; --ink:#f2f5fa; --soft:#b4c3de;
-  --rule:#26406e; --lime:#c8ff3d; --good:#5ee08a; --warn:#ffc24a; --bad:#ff6b5e;
-  --on-sport:#06122a;
-  --cond:'Barlow Condensed','Arial Narrow',Impact,sans-serif;
-  --sans:'IBM Plex Sans',system-ui,sans-serif;
-  --mono:'IBM Plex Mono',ui-monospace,Menlo,monospace;
-  background:var(--bg); color:var(--ink); font-family:var(--sans);
-  min-height:100vh; padding:max(24px, env(safe-area-inset-top)) 16px 64px; -webkit-font-smoothing:antialiased;
+  --bg:#0b0d10; --card:#13161b; --raise:#1a1e25; --rule:#252a32; --rule2:#323844;
+  --ink:#eceef1; --soft:#a3abb6; --mute:#6f7782;
+  --lime:#c8ff3d; --good:#3dd68c; --warn:#f5b841; --bad:#f2545b; --elite:#5b9dff;
+  --on-sport:#0b0d10;
+  --sans:'Inter',system-ui,-apple-system,'Segoe UI',sans-serif;
+  --cond:var(--sans); --mono:var(--sans);
+  background:var(--bg); color:var(--ink); font-family:var(--sans); font-size:15px; line-height:1.5;
+  font-feature-settings:"tnum" 1,"cv11" 1;
+  min-height:100vh; padding:max(20px, env(safe-area-inset-top)) 16px 64px; -webkit-font-smoothing:antialiased;
 }
 .fs *{box-sizing:border-box;}
-.fs .wrap{max-width:940px;margin:0 auto;}
+.fs .wrap{max-width:960px;margin:0 auto;}
+.fs button{font-family:var(--sans);}
 
-.fs .masthead{display:flex;align-items:flex-end;justify-content:space-between;
-  gap:16px;border-bottom:3px solid var(--sport);padding-bottom:12px;flex-wrap:wrap;}
-.fs .tagline{font-family:var(--mono);font-size:12px;letter-spacing:.12em;
-  text-transform:uppercase;color:var(--soft);padding-bottom:4px;}
-.fs .mastright{display:flex;flex-direction:column;align-items:flex-end;gap:8px;}
+/* ---- header ---- */
+.fs .masthead{display:flex;align-items:center;justify-content:space-between;gap:16px;padding-bottom:16px;
+  border-bottom:1px solid var(--rule);}
+.fs .tagline{display:none;}
+.fs .mastright{display:flex;align-items:center;gap:10px;}
+.fs .streakchip{display:inline-flex;align-items:center;gap:7px;font-size:14px;font-weight:600;padding:7px 12px;
+  border:1px solid var(--rule2);border-radius:999px;color:var(--ink);background:var(--card);cursor:pointer;white-space:nowrap;}
+.fs .streakchip .flame{color:var(--warn);display:inline-flex;}
+.fs .streakchip[data-zero="1"]{color:var(--soft);}
+.fs .streakchip[data-zero="1"] .flame{color:var(--mute);}
+.fs .installbtn{font-size:14px;font-weight:600;padding:7px 12px;border-radius:999px;background:var(--raise);
+  color:var(--ink);border:1px solid var(--rule2);cursor:pointer;}
 
-.fs .streakchip{display:inline-flex;align-items:center;gap:6px;font-family:var(--cond);font-size:20px;font-weight:700;
-  font-style:italic;text-transform:uppercase;letter-spacing:.03em;padding:5px 12px;border:2px solid var(--lime);
-  color:var(--lime);background:transparent;cursor:pointer;}
-.fs .streakchip[data-zero="1"]{border-color:var(--rule);color:var(--soft);}
-.fs .flame{display:inline-block;}
-.fs .streakchip:not([data-zero="1"]) .flame{animation:flick 1.6s ease-in-out infinite;}
-@keyframes flick{0%,100%{transform:scale(1) rotate(-4deg);}50%{transform:scale(1.18) rotate(5deg);}}
-
-.fs .tabs{display:flex;gap:6px;margin:18px 0 26px;flex-wrap:wrap;}
-.fs .tab{font-family:var(--cond);font-size:19px;font-weight:700;font-style:italic;text-transform:uppercase;
-  letter-spacing:.04em;padding:8px 20px;background:var(--card);border:0;cursor:pointer;
-  color:var(--soft);transform:skewX(-8deg);}
-.fs .tab > *{display:inline-block;transform:skewX(8deg);}
+/* ---- top tabs (desktop) ---- */
+.fs .tabs{display:flex;gap:4px;margin:14px 0 24px;border-bottom:1px solid var(--rule);flex-wrap:wrap;}
+.fs .tab{font-size:14.5px;font-weight:600;padding:10px 14px;background:transparent;border:0;cursor:pointer;
+  color:var(--soft);border-bottom:2px solid transparent;margin-bottom:-1px;}
 .fs .tab:hover{color:var(--ink);}
-.fs .tab[data-on="1"]{background:var(--sport);color:var(--on-sport);}
-.fs .tab:disabled{opacity:.4;cursor:not-allowed;}
-.fs .tab:focus-visible{outline:2px solid var(--lime);outline-offset:2px;}
+.fs .tab[data-on="1"]{color:var(--ink);border-bottom-color:var(--lime);}
+.fs .tab:focus-visible{outline:2px solid var(--lime);outline-offset:2px;border-radius:6px;}
 
-.fs .eyebrow{font-family:var(--mono);font-size:12px;letter-spacing:.12em;font-weight:500;
-  text-transform:uppercase;color:var(--sport);margin:0 0 10px;}
-.fs .card{background:var(--card);border:1px solid var(--rule);border-top:3px solid var(--sport);
-  padding:20px;margin-bottom:18px;}
-.fs .h2{font-family:var(--cond);font-size:30px;font-weight:800;font-style:italic;text-transform:uppercase;
-  letter-spacing:.02em;margin:0 0 14px;color:var(--ink);}
+/* ---- type + surfaces ---- */
+.fs .eyebrow{font-size:11.5px;font-weight:600;letter-spacing:.08em;text-transform:uppercase;color:var(--mute);margin:0 0 10px;}
+.fs .card{background:var(--card);border:1px solid var(--rule);border-radius:16px;padding:22px;margin-bottom:16px;}
+.fs .h2{font-size:22px;font-weight:700;letter-spacing:-.01em;margin:0 0 12px;color:var(--ink);}
 
 .fs .chipset{display:flex;flex-wrap:wrap;gap:8px;}
-.fs .chip{font-family:var(--cond);font-size:17px;font-weight:700;text-transform:uppercase;
-  letter-spacing:.04em;padding:7px 14px;background:var(--raise);color:var(--ink);
-  border:1px solid var(--rule);cursor:pointer;transition:transform .12s;}
-.fs .chip:hover{border-color:var(--sport);}
-.fs .chip:active{transform:scale(.96);}
-.fs .chip[data-on="1"]{background:var(--sport);color:var(--on-sport);border-color:var(--sport);}
+.fs .chip{font-size:14px;font-weight:500;padding:8px 14px;background:var(--raise);color:var(--soft);
+  border:1px solid var(--rule2);border-radius:10px;cursor:pointer;transition:background .12s,color .12s,border-color .12s;}
+.fs .chip:hover{color:var(--ink);border-color:var(--mute);}
+.fs .chip[data-on="1"]{background:var(--ink);color:var(--bg);border-color:var(--ink);font-weight:600;}
 .fs .chip:focus-visible{outline:2px solid var(--lime);outline-offset:2px;}
+.fs .chip.sm{font-size:13.5px;padding:7px 12px;}
 
 .fs .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(190px,1fr));gap:14px;}
-.fs .field label{display:block;font-family:var(--mono);font-size:11.5px;letter-spacing:.08em;font-weight:500;
-  text-transform:uppercase;color:var(--soft);margin-bottom:6px;}
-.fs .field input{width:100%;font-family:var(--mono);font-size:17px;font-weight:600;padding:9px 10px;
-  background:var(--bg);border:1px solid var(--rule);color:var(--ink);}
-.fs .field input::placeholder{color:#6f84ab;}
-.fs .field input:focus{outline:2px solid var(--sport);outline-offset:-1px;border-color:var(--sport);}
+.fs .field label{display:block;font-size:12.5px;font-weight:500;color:var(--soft);margin-bottom:6px;}
+.fs .field input{width:100%;font-family:var(--sans);font-size:17px;font-weight:600;padding:10px 12px;
+  background:var(--bg);border:1px solid var(--rule2);border-radius:10px;color:var(--ink);font-variant-numeric:tabular-nums;}
+.fs .field input::placeholder{color:#4d545e;}
+.fs .field input:focus{outline:none;border-color:var(--lime);box-shadow:0 0 0 3px rgba(200,255,61,.15);}
 
-.fs .go{font-family:var(--cond);font-size:22px;font-weight:800;font-style:italic;text-transform:uppercase;
-  letter-spacing:.05em;padding:12px 30px;background:var(--lime);color:var(--on-sport);border:0;cursor:pointer;
-  transition:transform .12s, filter .12s;}
-.fs .go:hover{filter:brightness(1.08);transform:translateY(-1px);}
-.fs .go:active{transform:scale(.97);}
-.fs .go:disabled{opacity:.5;cursor:default;transform:none;filter:none;}
-.fs .ghost{background:transparent;color:var(--ink);border:2px solid var(--sport);}
-.fs .ghost:hover{background:var(--sport);color:var(--on-sport);}
+.fs .go{font-size:15.5px;font-weight:700;padding:13px 24px;background:var(--lime);color:#0b0d10;border:0;border-radius:12px;
+  cursor:pointer;transition:filter .12s, transform .12s;}
+.fs .go:hover{filter:brightness(1.06);}
+.fs .go:active{transform:scale(.98);}
+.fs .go:disabled{opacity:.45;cursor:default;transform:none;filter:none;}
+.fs .ghost{background:transparent;color:var(--ink);border:1px solid var(--rule2);}
+.fs .ghost:hover{background:var(--raise);filter:none;}
 
-.fs .rankrow{display:grid;grid-template-columns:1.1fr 84px 1fr 62px;gap:14px;align-items:center;
-  padding:13px 0;border-bottom:1px solid var(--rule);}
+/* ---- report ---- */
+.fs .rankrow{display:grid;grid-template-columns:1.2fr 90px 1fr 48px;gap:16px;align-items:center;
+  padding:14px 0;border-bottom:1px solid var(--rule);}
 .fs .rankrow:last-child{border-bottom:0;}
-.fs .rname{font-family:var(--sans);font-size:15px;font-weight:600;}
-.fs .rsub{font-family:var(--mono);font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:var(--soft);}
-.fs .rval{font-family:var(--mono);font-size:15px;font-weight:600;text-align:right;white-space:nowrap;}
-.fs .rval .per{color:var(--soft);font-weight:400;}
-.fs .scale{position:relative;height:10px;background:var(--bg);border-radius:5px;overflow:hidden;}
-.fs .bar{position:absolute;left:0;top:0;bottom:0;border-radius:5px;background:var(--soft);}
-.fs .bar[data-b="elite"],.fs .bar[data-b="good"]{background:var(--good);}
+.fs .rname{font-size:15px;font-weight:600;}
+.fs .rsub{font-size:12.5px;color:var(--mute);margin-top:1px;}
+.fs .rval{font-size:14px;font-weight:600;text-align:right;white-space:nowrap;font-variant-numeric:tabular-nums;}
+.fs .rval .per{color:var(--mute);font-weight:400;}
+.fs .scale{position:relative;height:6px;background:var(--raise);border-radius:3px;overflow:hidden;}
+.fs .bar{position:absolute;left:0;top:0;bottom:0;border-radius:3px;background:var(--soft);}
+.fs .bar[data-b="elite"]{background:var(--elite);}
+.fs .bar[data-b="good"]{background:var(--good);}
+.fs .bar[data-b="par"]{background:#8b939e;}
 .fs .bar[data-b="low"]{background:var(--warn);}
 .fs .bar[data-b="gap"]{background:var(--bad);}
-.fs .pnum{font-family:var(--cond);font-size:40px;font-weight:800;font-style:italic;line-height:.8;text-align:right;}
-.fs .pnum[data-b="elite"],.fs .pnum[data-b="good"]{color:var(--good);}
+.fs .pnum{font-size:22px;font-weight:700;text-align:right;font-variant-numeric:tabular-nums;}
+.fs .pnum[data-b="elite"]{color:var(--elite);}
+.fs .pnum[data-b="good"]{color:var(--good);}
 .fs .pnum[data-b="low"]{color:var(--warn);}
 .fs .pnum[data-b="gap"]{color:var(--bad);}
-.fs .pbtag{font-family:var(--mono);font-size:10px;font-weight:600;letter-spacing:.08em;background:var(--lime);
-  color:var(--on-sport);padding:2px 6px;margin-left:8px;vertical-align:2px;}
+.fs .pbtag{font-size:10.5px;font-weight:700;letter-spacing:.04em;background:rgba(200,255,61,.14);color:var(--lime);
+  padding:2px 6px;border-radius:5px;margin-left:8px;vertical-align:2px;}
 
-.fs .stamp{display:flex;align-items:center;gap:18px;background:var(--sport);color:var(--on-sport);
-  padding:16px 22px;margin-bottom:18px;}
-.fs .stampnum{font-family:var(--cond);font-size:84px;font-weight:800;font-style:italic;line-height:.8;}
-.fs .stamptxt{font-family:var(--mono);font-size:12px;font-weight:600;letter-spacing:.1em;text-transform:uppercase;}
+.fs .stamp{display:flex;align-items:center;gap:20px;background:var(--card);border:1px solid var(--rule);border-radius:16px;
+  padding:20px 22px;margin-bottom:16px;}
+.fs .stampnum{min-width:96px;text-align:center;font-size:44px;font-weight:800;letter-spacing:-.02em;line-height:1;
+  padding:14px 12px;border-radius:14px;font-variant-numeric:tabular-nums;color:#0b0d10;background:var(--soft);}
+.fs .stampnum[data-r="elite"]{background:var(--elite);}
+.fs .stampnum[data-r="good"]{background:var(--good);}
+.fs .stampnum[data-r="par"]{background:#c3c9d1;}
+.fs .stampnum[data-r="low"]{background:var(--warn);}
+.fs .stampnum[data-r="gap"]{background:var(--bad);}
+.fs .stamptxt{font-size:13.5px;color:var(--soft);}
+.fs .stamptxt:first-child{font-size:19px;font-weight:700;color:var(--ink);margin-bottom:2px;}
 
-.fs .fix{border-left:4px solid var(--bad);padding:14px 0 14px 16px;margin-bottom:16px;}
-.fs .fix h4{font-family:var(--cond);font-size:23px;font-weight:800;font-style:italic;text-transform:uppercase;margin:0 0 6px;}
-.fs .fix p{margin:0 0 10px;font-size:15px;line-height:1.55;}
+.fs .fix{border-left:3px solid var(--bad);padding:4px 0 4px 16px;margin-bottom:22px;}
+.fs .fix h4{font-size:16.5px;font-weight:700;margin:0 0 6px;}
+.fs .fix p{margin:0 0 10px;font-size:14.5px;line-height:1.6;color:var(--soft);}
 .fs .fix ul{margin:0 0 12px;padding-left:18px;}
 .fs .fix li{font-size:14.5px;line-height:1.6;margin-bottom:5px;}
-.fs .watch{font-family:var(--mono);font-size:12px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;
-  color:var(--lime);text-decoration:none;border-bottom:1px solid var(--lime);}
+.fs .watch{font-size:13.5px;font-weight:600;color:var(--lime);text-decoration:none;}
+.fs .watch:hover{text-decoration:underline;}
 
-.fs .keep{border-left:4px solid var(--good);padding:10px 0 10px 16px;margin-bottom:12px;}
-.fs .keep strong{font-family:var(--cond);font-size:21px;font-weight:800;font-style:italic;text-transform:uppercase;}
-.fs .keep span{display:block;font-size:14.5px;color:var(--soft);margin-top:2px;}
+.fs .keep{border-left:3px solid var(--good);padding:4px 0 4px 16px;margin-bottom:14px;}
+.fs .keep strong{font-size:16.5px;font-weight:700;}
+.fs .keep span{display:block;font-size:14.5px;color:var(--soft);margin-top:3px;}
 
-.fs table{width:100%;border-collapse:collapse;font-family:var(--mono);font-size:13.5px;}
-.fs th{text-align:left;font-size:11px;letter-spacing:.1em;text-transform:uppercase;
-  color:var(--soft);font-weight:500;padding:0 8px 8px 0;border-bottom:2px solid var(--sport);}
-.fs td{padding:10px 8px 10px 0;border-bottom:1px solid var(--rule);}
+.fs table{width:100%;border-collapse:collapse;font-size:14px;font-variant-numeric:tabular-nums;}
+.fs th{text-align:left;font-size:11.5px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;
+  color:var(--mute);padding:0 8px 10px 0;border-bottom:1px solid var(--rule2);}
+.fs td{padding:12px 8px 12px 0;border-bottom:1px solid var(--rule);}
 .fs .up{color:var(--good);font-weight:600;} .fs .down{color:var(--bad);font-weight:600;}
 
-.fs .empty{font-family:var(--sans);font-size:15px;color:var(--soft);line-height:1.6;}
-.fs .note{font-family:var(--mono);font-size:11.5px;color:var(--soft);line-height:1.65;
-  border-top:1px solid var(--rule);padding-top:12px;margin-top:22px;}
+.fs .empty{font-size:15px;color:var(--soft);line-height:1.6;margin:0;}
+.fs .note{font-size:12.5px;color:var(--mute);line-height:1.6;border-top:1px solid var(--rule);padding-top:14px;margin-top:24px;}
 
-.fs .rowhead{display:flex;align-items:flex-end;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-bottom:12px;}
+.fs .rowhead{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-bottom:10px;}
 .fs .rowhead .h2{margin:0;}
-.fs .chip.sm{font-size:15px;padding:5px 12px;}
-.fs .hint{font-family:var(--sans);font-size:14px;color:var(--soft);line-height:1.55;margin:0 0 16px;}
+.fs .hint{font-size:14px;color:var(--soft);line-height:1.55;margin:0 0 16px;}
 .fs .hint b{color:var(--ink);font-weight:600;}
-.fs .stepper{display:grid;grid-template-columns:42px 1fr 42px;}
-.fs .stepper input{text-align:center;border-left:0;border-right:0;}
-.fs .stepper button{font-family:var(--mono);font-size:20px;font-weight:600;background:var(--raise);
-  border:1px solid var(--rule);color:var(--ink);cursor:pointer;padding:0;}
-.fs .stepper button:hover{background:var(--sport);color:var(--on-sport);border-color:var(--sport);}
-.fs .stepper button:active{transform:scale(.94);}
+.fs .stepper{display:grid;grid-template-columns:44px 1fr 44px;}
+.fs .stepper input{text-align:center;border-radius:0;border-left:0;border-right:0;}
+.fs .stepper button{font-size:19px;font-weight:500;background:var(--raise);border:1px solid var(--rule2);color:var(--soft);cursor:pointer;padding:0;}
+.fs .stepper button:first-child{border-radius:10px 0 0 10px;}
+.fs .stepper button:last-child{border-radius:0 10px 10px 0;}
+.fs .stepper button:hover{color:var(--ink);background:var(--rule2);}
+.fs .stepper button:active{transform:scale(.96);}
 .fs .stepper button:focus-visible{outline:2px solid var(--lime);outline-offset:-2px;}
-.fs .err{font-family:var(--sans);font-size:14px;color:var(--bad);border-left:4px solid var(--bad);
-  background:var(--card);padding:10px 12px;margin:0 0 16px;}
+.fs .err{font-size:14px;color:#ffb3b6;border:1px solid rgba(242,84,91,.4);background:rgba(242,84,91,.1);
+  border-radius:10px;padding:11px 14px;margin:0 0 16px;}
 
-.fs .weekbar{display:flex;align-items:center;gap:14px;margin-bottom:16px;flex-wrap:wrap;}
-.fs .count{font-family:var(--cond);font-size:48px;font-weight:800;font-style:italic;line-height:.85;color:var(--sport);}
-.fs .lbl{font-family:var(--mono);font-size:12px;font-weight:500;letter-spacing:.1em;text-transform:uppercase;color:var(--soft);}
-.fs .daycard{border:1px solid var(--rule);border-left:4px solid var(--rule);background:var(--card);padding:16px;margin-bottom:12px;}
-.fs .daycard[data-done="1"]{border-left-color:var(--good);}
-.fs .dayhead{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:10px;}
-.fs .dayname{font-family:var(--cond);font-size:28px;font-weight:800;font-style:italic;text-transform:uppercase;}
-.fs .tag{font-family:var(--mono);font-size:11px;font-weight:600;letter-spacing:.08em;text-transform:uppercase;
-  padding:3px 8px;margin-left:10px;vertical-align:4px;}
-.fs .tag[data-t="physical"]{background:var(--warn);color:var(--on-sport);}
-.fs .tag[data-t="skill"]{background:var(--sport);color:var(--on-sport);}
-.fs .donebtn{font-family:var(--cond);font-size:16px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;
-  padding:7px 14px;border:2px solid var(--good);background:transparent;color:var(--good);cursor:pointer;white-space:nowrap;}
-.fs .donebtn[data-on="1"]{background:var(--good);color:var(--on-sport);}
-.fs .step{font-size:14.5px;line-height:1.55;padding:8px 0;border-top:1px solid var(--rule);}
+/* ---- training ---- */
+.fs .weekbar{display:flex;align-items:baseline;gap:12px;margin-bottom:14px;flex-wrap:wrap;}
+.fs .count{font-size:40px;font-weight:800;letter-spacing:-.02em;line-height:1;font-variant-numeric:tabular-nums;}
+.fs .lbl{font-size:13px;color:var(--soft);}
+.fs .daycard{border:1px solid var(--rule);background:var(--card);border-radius:14px;padding:18px;margin-bottom:12px;}
+.fs .daycard[data-done="1"]{border-color:rgba(61,214,140,.45);}
+.fs .dayhead{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:8px;}
+.fs .dayname{font-size:18px;font-weight:700;}
+.fs .tag{font-size:12px;font-weight:600;padding:3px 9px;border-radius:999px;margin-left:10px;vertical-align:2px;
+  background:var(--raise);color:var(--soft);}
+.fs .tag[data-t="physical"]{background:rgba(245,184,65,.14);color:var(--warn);}
+.fs .tag[data-t="skill"]{background:rgba(91,157,255,.15);color:var(--elite);}
+.fs .donebtn{display:inline-flex;align-items:center;gap:6px;font-size:13.5px;font-weight:600;padding:7px 12px;border-radius:10px;
+  border:1px solid var(--rule2);background:transparent;color:var(--ink);cursor:pointer;white-space:nowrap;}
+.fs .donebtn[data-on="1"]{background:rgba(61,214,140,.15);border-color:rgba(61,214,140,.5);color:var(--good);}
+.fs .step{font-size:14.5px;line-height:1.55;padding:10px 0;border-top:1px solid var(--rule);}
 .fs .step b{font-weight:600;}
-.fs .step .mins{font-family:var(--mono);font-size:12px;color:var(--soft);margin-left:8px;}
-.fs .step .why{font-family:var(--mono);font-size:12px;font-weight:500;color:var(--lime);margin-top:3px;}
+.fs .step div{color:var(--soft);}
+.fs .step .mins{font-size:12.5px;color:var(--mute);margin-left:8px;}
+.fs .step .why{font-size:12.5px;font-weight:500;color:var(--elite);margin-top:3px;}
 
 /* ---- daily tracker ---- */
-.fs .streakrow{display:flex;align-items:flex-end;gap:28px;flex-wrap:wrap;margin-bottom:16px;}
-.fs .streaknum{font-family:var(--cond);font-size:72px;font-weight:800;font-style:italic;line-height:.8;color:var(--lime);}
-.fs .days{display:grid;grid-template-columns:repeat(14,1fr);gap:5px;margin-bottom:8px;}
-.fs .dot{aspect-ratio:1;background:var(--bg);border:1px solid var(--rule);display:flex;align-items:center;justify-content:center;
-  font-family:var(--mono);font-size:10px;color:var(--soft);}
-.fs .dot[data-k="train"]{background:var(--sport);border-color:var(--sport);color:var(--on-sport);}
-.fs .dot[data-k="match"]{background:var(--lime);border-color:var(--lime);color:var(--on-sport);}
-.fs .dot[data-k="rest"]{background:var(--raise);border-color:var(--soft);color:var(--ink);}
-.fs .dot[data-today="1"]{outline:2px solid var(--ink);outline-offset:1px;}
-.fs .legend{display:flex;gap:14px;flex-wrap:wrap;font-family:var(--mono);font-size:11.5px;color:var(--soft);margin-bottom:16px;}
-.fs .legend i{display:inline-block;width:10px;height:10px;margin-right:6px;vertical-align:-1px;}
+.fs .streakrow{display:flex;align-items:flex-end;gap:36px;flex-wrap:wrap;margin-bottom:18px;}
+.fs .streaknum{font-size:56px;font-weight:800;letter-spacing:-.03em;line-height:1;font-variant-numeric:tabular-nums;}
+.fs .days{display:grid;grid-template-columns:repeat(14,1fr);gap:5px;margin-bottom:10px;}
+.fs .dot{aspect-ratio:1;background:var(--raise);border-radius:6px;display:flex;align-items:center;justify-content:center;
+  font-size:10.5px;font-weight:500;color:var(--mute);font-variant-numeric:tabular-nums;}
+.fs .dot[data-k="train"]{background:var(--good);color:#0b0d10;}
+.fs .dot[data-k="match"]{background:var(--lime);color:#0b0d10;}
+.fs .dot[data-k="rest"]{background:#3a414c;color:var(--ink);}
+.fs .dot[data-today="1"]{box-shadow:0 0 0 2px var(--bg),0 0 0 3.5px var(--soft);}
+.fs .legend{display:flex;gap:16px;flex-wrap:wrap;font-size:12.5px;color:var(--soft);margin-bottom:16px;}
+.fs .legend i{display:inline-block;width:10px;height:10px;border-radius:3px;margin-right:6px;vertical-align:-1px;}
 
 /* ---- personal best ---- */
-.fs .pb{position:relative;overflow:hidden;background:var(--lime);color:var(--on-sport);padding:18px 22px;margin-bottom:18px;
-  animation:pbin .6s cubic-bezier(.2,1.4,.4,1) both;}
-.fs .pb .big{font-family:var(--cond);font-size:34px;font-weight:800;font-style:italic;text-transform:uppercase;line-height:1;}
-.fs .pb .small{font-family:var(--mono);font-size:12px;font-weight:600;letter-spacing:.08em;text-transform:uppercase;margin-top:6px;}
-.fs .pb .shine{position:absolute;top:0;bottom:0;width:80px;left:-120px;background:rgba(255,255,255,.55);
-  transform:skewX(-20deg);animation:shine 1.4s .5s ease-out both;}
-.fs .confetti{position:absolute;inset:0;pointer-events:none;}
-.fs .confetti span{position:absolute;top:50%;left:50%;width:8px;height:12px;opacity:0;
-  animation:burst 1.1s ease-out forwards;}
-@keyframes pbin{0%{transform:scale(.6) rotate(-3deg);opacity:0;}100%{transform:scale(1) rotate(0);opacity:1;}}
-@keyframes shine{to{left:110%;}}
-@keyframes burst{0%{opacity:1;transform:translate(-50%,-50%) rotate(0);}
-  100%{opacity:0;transform:translate(calc(-50% + var(--x)),calc(-50% + var(--y))) rotate(var(--r));}}
+.fs .pb{position:relative;overflow:hidden;display:flex;align-items:center;gap:16px;background:var(--card);
+  border:1px solid rgba(200,255,61,.35);border-radius:16px;padding:18px 20px;margin-bottom:16px;
+  animation:pbin .5s cubic-bezier(.2,.9,.3,1) both;}
+.fs .pb::before{content:"";position:absolute;inset:0;background:linear-gradient(100deg,transparent 30%,rgba(200,255,61,.10) 50%,transparent 70%);
+  transform:translateX(-100%);animation:sweep 1.6s .35s ease-out both;}
+.fs .pbicon{flex:none;width:46px;height:46px;border-radius:12px;background:rgba(200,255,61,.14);color:var(--lime);
+  display:flex;align-items:center;justify-content:center;animation:pop .5s .25s cubic-bezier(.2,1.6,.4,1) both;}
+.fs .pb .big{font-size:17px;font-weight:700;}
+.fs .pb .big em{font-style:normal;color:var(--lime);}
+.fs .pb .small{font-size:13.5px;color:var(--soft);margin-top:2px;}
+.fs .shine,.fs .confetti{display:none;}
+@keyframes pbin{0%{transform:translateY(8px);opacity:0;}100%{transform:none;opacity:1;}}
+@keyframes sweep{to{transform:translateX(100%);}}
+@keyframes pop{0%{transform:scale(.4);}100%{transform:scale(1);}}
 
 /* ---- sport picker ---- */
-.fs .picker{max-width:560px;}
-.fs .pickhead{display:flex;justify-content:center;margin:12px 0 28px;}
-.fs .picktitle{font-family:var(--cond);font-size:40px;font-weight:800;font-style:italic;text-transform:uppercase;
-  text-align:center;margin:0 0 10px;line-height:1;}
-.fs .sporttiles{display:grid;grid-template-columns:minmax(0,1fr);gap:14px;margin-top:22px;}
-.fs .sporttile{position:relative;display:flex;align-items:center;gap:18px;width:100%;padding:22px 24px;
-  background:var(--card);border:2px solid var(--rule);border-left:8px solid var(--tile);cursor:pointer;color:var(--ink);
-  text-align:left;transition:transform .12s, border-color .12s, background .12s;}
-.fs .sporttile:hover,.fs .sporttile:focus-visible{border-color:var(--tile);background:var(--raise);transform:translateX(4px);outline:none;}
-.fs .sporttile:active{transform:scale(.98);}
-.fs .sporttile[data-last="1"]{border-color:var(--tile);}
-.fs .sticon{font-size:44px;line-height:1;}
-.fs .stname{min-width:0;font-family:var(--cond);font-size:36px;font-weight:800;font-style:italic;text-transform:uppercase;}
-.fs .stlast{position:absolute;top:10px;right:12px;font-family:var(--mono);font-size:11px;font-weight:600;letter-spacing:.08em;
-  text-transform:uppercase;background:var(--tile);color:var(--on-sport);padding:3px 8px;}
+.fs .picker{max-width:520px;}
+.fs .pickhead{display:flex;justify-content:center;margin:20px 0 36px;}
+.fs .picktitle{font-size:28px;font-weight:700;letter-spacing:-.02em;text-align:center;margin:0 0 8px;line-height:1.2;}
+.fs .sporttiles{display:grid;grid-template-columns:minmax(0,1fr);gap:10px;margin-top:26px;}
+.fs .sporttile{position:relative;display:flex;align-items:center;gap:16px;width:100%;padding:18px 18px;
+  background:var(--card);border:1px solid var(--rule);border-radius:14px;cursor:pointer;color:var(--ink);
+  text-align:left;transition:background .12s,border-color .12s;}
+.fs .sporttile:hover,.fs .sporttile:focus-visible{background:var(--raise);border-color:var(--rule2);outline:none;}
+.fs .sporttile:active{transform:scale(.99);}
+.fs .sticon{flex:none;width:46px;height:46px;border-radius:12px;display:flex;align-items:center;justify-content:center;
+  background:color-mix(in srgb,var(--tile) 16%,transparent);color:var(--tile);}
+.fs .stname{min-width:0;flex:1;font-size:18px;font-weight:600;}
+.fs .stlast{font-size:12px;font-weight:600;color:var(--soft);background:var(--raise);padding:3px 9px;border-radius:999px;}
+.fs .stchev{color:var(--mute);display:flex;}
+.fs .pickfoot{text-align:center;margin-top:28px;}
+.fs .linkbtn{background:none;border:0;color:var(--mute);font-size:14px;text-decoration:underline;cursor:pointer;padding:6px;}
+.fs .linkbtn:hover{color:var(--ink);}
 
 /* ---- log page ---- */
 .fs .sportbar{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:16px;}
-.fs .sbname{font-family:var(--cond);font-size:30px;font-weight:800;font-style:italic;text-transform:uppercase;color:var(--sport);}
-.fs .sbchange{font-family:var(--cond);font-size:16px;font-weight:700;text-transform:uppercase;letter-spacing:.04em;
-  padding:7px 14px;background:transparent;color:var(--ink);border:2px solid var(--sport);cursor:pointer;}
-.fs .sbchange:hover{background:var(--sport);color:var(--on-sport);}
-.fs .rolegrid{display:grid;grid-template-columns:minmax(0,1.4fr) minmax(0,1fr);gap:20px;}
+.fs .sbname{display:flex;align-items:center;gap:10px;font-size:22px;font-weight:700;letter-spacing:-.01em;}
+.fs .sbname .sbicon{width:38px;height:38px;border-radius:10px;display:flex;align-items:center;justify-content:center;
+  background:color-mix(in srgb,var(--sport) 16%,transparent);color:var(--sport);}
+.fs .sbchange{font-size:14px;font-weight:600;padding:8px 14px;background:var(--card);color:var(--ink);
+  border:1px solid var(--rule2);border-radius:10px;cursor:pointer;}
+.fs .sbchange:hover{background:var(--raise);}
+.fs .rolegrid{display:grid;grid-template-columns:minmax(0,1.4fr) minmax(0,1fr);gap:22px;}
 
-.fs .pickfoot{text-align:center;margin-top:28px;}
-.fs .linkbtn{background:none;border:0;color:var(--soft);font-family:var(--sans);font-size:14px;text-decoration:underline;cursor:pointer;padding:6px;}
-.fs .linkbtn:hover{color:var(--ink);}
-
-/* ---- bottom tab bar (phones) ---- */
 .fs .bottombar{display:none;}
 
-/* ---- technique check ---- */
-.fs .tips{margin:0 0 14px;padding-left:20px;}
-.fs .tips li{font-size:15px;line-height:1.6;}
-.fs .techgrid{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:24px;align-items:start;}
-.fs .techimg{width:100%;display:block;border:2px solid var(--sport);}
-.fs .tcheck{border-left:4px solid var(--good);background:var(--bg);padding:12px 14px;margin-bottom:12px;}
-.fs .tcheck[data-s="work"]{border-left-color:var(--warn);}
+/* ---- technique ---- */
+.fs .tips{margin:0 0 14px;padding-left:20px;color:var(--soft);}
+.fs .tips li{font-size:14.5px;line-height:1.7;}
+.fs .techgrid{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:22px;align-items:start;}
+.fs .techimg{width:100%;display:block;border-radius:12px;border:1px solid var(--rule2);}
+.fs .tcheck{background:var(--bg);border:1px solid var(--rule);border-radius:12px;padding:14px 16px;margin-bottom:10px;}
 .fs .tchead{display:flex;justify-content:space-between;align-items:center;gap:10px;}
-.fs .tstat{font-family:var(--mono);font-size:11px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;
-  padding:3px 8px;white-space:nowrap;background:var(--good);color:var(--on-sport);}
-.fs .tstat[data-s="work"]{background:var(--warn);}
-.fs .tclabel{font-family:var(--cond);font-size:22px;font-weight:800;font-style:italic;text-transform:uppercase;}
-.fs .tcval{font-family:var(--cond);font-size:36px;font-weight:800;font-style:italic;margin:2px 0 4px;}
-.fs .tcval span{font-family:var(--mono);font-size:12px;font-style:normal;font-weight:500;color:var(--soft);margin-left:8px;}
-.fs .tcheck p{margin:6px 0 0;font-size:14.5px;line-height:1.55;}
-.fs .tcheck .drill{color:var(--lime);}
-.fs .tcheck .drill b{color:var(--lime);}
+.fs .tstat{font-size:12px;font-weight:600;padding:3px 9px;border-radius:999px;white-space:nowrap;
+  background:rgba(61,214,140,.14);color:var(--good);}
+.fs .tstat[data-s="work"]{background:rgba(245,184,65,.14);color:var(--warn);}
+.fs .tclabel{font-size:15.5px;font-weight:600;}
+.fs .tcval{font-size:30px;font-weight:800;letter-spacing:-.02em;margin:4px 0 2px;font-variant-numeric:tabular-nums;}
+.fs .tcval span{font-size:13px;font-weight:500;letter-spacing:0;color:var(--mute);margin-left:8px;}
+.fs .tcheck p{margin:6px 0 0;font-size:14px;line-height:1.55;color:var(--soft);}
+.fs .tcheck .drill{color:var(--ink);}
+.fs .tcheck .drill b{color:var(--lime);font-weight:600;}
 
-/* ---- player card + install ---- */
-.fs .cardgrid{display:grid;grid-template-columns:minmax(0,340px) minmax(0,1fr);gap:28px;align-items:start;}
-.fs .cardimg{width:100%;max-width:340px;display:block;animation:cardin .7s cubic-bezier(.2,1.3,.4,1) both;}
-@keyframes cardin{0%{transform:perspective(800px) rotateY(-70deg) scale(.85);opacity:0;}100%{transform:none;opacity:1;}}
-.fs .attr{display:grid;grid-template-columns:44px 1fr 44px;gap:10px;align-items:center;padding:8px 0;border-bottom:1px solid var(--rule);}
-.fs .attr b{font-family:var(--cond);font-size:28px;font-weight:800;font-style:italic;color:var(--ink);}
-.fs .attr span{font-size:15px;}
-.fs .attr em{font-family:var(--mono);font-size:13px;font-style:normal;font-weight:600;text-align:right;}
-.fs .namefield{margin:16px 0;}
+/* ---- player profile ---- */
+.fs .cardgrid{display:grid;grid-template-columns:minmax(0,360px) minmax(0,1fr);gap:28px;align-items:start;}
+.fs .cardimg{width:100%;max-width:360px;display:block;border-radius:18px;animation:pbin .5s ease-out both;}
+.fs .attr{display:grid;grid-template-columns:1fr 120px 36px 40px;gap:12px;align-items:center;padding:10px 0;border-bottom:1px solid var(--rule);}
+.fs .attr span{font-size:14.5px;}
+.fs .attr b{font-size:16px;font-weight:700;text-align:right;font-variant-numeric:tabular-nums;}
+.fs .attr .abar{height:6px;background:var(--raise);border-radius:3px;overflow:hidden;}
+.fs .attr .abar i{display:block;height:100%;border-radius:3px;}
+.fs .attr em{font-size:13px;font-style:normal;font-weight:600;text-align:right;}
+.fs .namefield{margin:18px 0;}
 .fs .namefield input{max-width:340px;}
-.fs .installbtn{font-family:var(--cond);font-size:16px;font-weight:700;text-transform:uppercase;letter-spacing:.04em;
-  padding:5px 12px;background:var(--sport);color:var(--on-sport);border:0;cursor:pointer;}
 .fs .ioshint{display:flex;align-items:center;justify-content:space-between;gap:12px;background:var(--card);
-  border:1px solid var(--rule);border-left:4px solid var(--lime);padding:10px 12px;margin:14px 0 0;font-size:14px;color:var(--soft);}
+  border:1px solid var(--rule);border-radius:12px;padding:10px 14px;margin:14px 0 0;font-size:14px;color:var(--soft);}
 .fs .ioshint b{color:var(--ink);}
 .fs .ioshint button{background:none;border:0;color:var(--soft);font-size:20px;cursor:pointer;padding:0 4px;}
 
@@ -512,36 +516,30 @@ body{background:#07142b;margin:0;}
   .fs{padding-bottom:calc(86px + env(safe-area-inset-bottom));}
   .fs .tabs{display:none;}
   .fs .bottombar{display:grid;grid-template-columns:repeat(5,1fr);position:fixed;left:0;right:0;bottom:0;z-index:40;
-    background:#0a1a36;border-top:2px solid var(--sport);padding:6px 4px calc(6px + env(safe-area-inset-bottom));}
-  .fs .bottombar button{display:flex;flex-direction:column;align-items:center;gap:2px;background:none;border:0;cursor:pointer;
-    color:var(--soft);font-family:var(--cond);font-size:11.5px;font-weight:700;text-transform:uppercase;letter-spacing:0;padding:6px 0;min-width:0;}
-  .fs .bottombar .bbicon{font-size:20px;line-height:1.1;filter:grayscale(1);opacity:.7;}
-  .fs .bottombar button[data-on="1"]{color:var(--sport);}
-  .fs .bottombar button[data-on="1"] .bbicon{filter:none;opacity:1;}
-  .fs .masthead{flex-wrap:nowrap;align-items:center;padding-bottom:10px;margin-bottom:18px;}
-  .fs .masthead svg{width:150px !important;height:auto !important;}
-  .fs .tagline{display:none;}
-  .fs .mastright{align-items:flex-end;gap:6px;}
-  .fs .streakchip{font-size:14px;padding:4px 9px;white-space:nowrap;}
-  .fs .sporttile{padding:18px 16px;gap:14px;}
-  .fs .sticon{font-size:36px;}
-  .fs .stname{font-size:30px;}
-  .fs .installbtn{font-size:13px;padding:4px 9px;}
+    background:rgba(13,15,19,.94);backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px);border-top:1px solid var(--rule);
+    padding:6px 4px calc(6px + env(safe-area-inset-bottom));}
+  .fs .bottombar button{display:flex;flex-direction:column;align-items:center;gap:3px;background:none;border:0;cursor:pointer;
+    color:var(--mute);font-size:11px;font-weight:600;padding:6px 0;min-width:0;}
+  .fs .bottombar .bbicon{display:flex;}
+  .fs .bottombar button[data-on="1"]{color:var(--lime);}
+  .fs .masthead{flex-wrap:nowrap;margin-bottom:18px;}
+  .fs .masthead svg.logo{width:132px !important;height:auto !important;}
+  .fs .streakchip{font-size:13px;padding:6px 10px;}
+  .fs .installbtn{font-size:13px;padding:6px 10px;}
+  .fs .card{padding:18px;border-radius:14px;}
   .fs .rolegrid{grid-template-columns:1fr;gap:16px;}
-  .fs .picktitle{font-size:32px;}
-  .fs .sbname{font-size:26px;}
-  .fs .cardgrid{grid-template-columns:1fr;}
-  .fs .techgrid{grid-template-columns:1fr;}
+  .fs .cardgrid,.fs .techgrid{grid-template-columns:1fr;}
   .fs .cardimg{margin:0 auto;}
-  .fs .rankrow{grid-template-columns:1fr 62px 44px;grid-template-areas:"n v p" "s s s";row-gap:8px;}
-  .fs .rname{grid-area:n;} .fs .rval{grid-area:v;} .fs .pnum{grid-area:p;font-size:32px;}
+  .fs .attr{grid-template-columns:1fr 80px 32px 36px;}
+  .fs .rankrow{grid-template-columns:1fr auto 40px;grid-template-areas:"n v p" "s s s";row-gap:8px;}
+  .fs .rname{grid-area:n;} .fs .rval{grid-area:v;} .fs .pnum{grid-area:p;}
   .fs .scale{grid-area:s;}
-  .fs .stampnum{font-size:64px;}
-  .fs .tab{flex:1 1 auto;font-size:16px;padding:8px 10px;}
+  .fs .stampnum{min-width:80px;font-size:36px;}
   .fs .dayhead{flex-wrap:wrap;}
   .fs .days{gap:3px;}
-  .fs .dot{font-size:9px;}
-  .fs .mastright{align-items:flex-start;}
+  .fs .dot{font-size:9.5px;border-radius:4px;}
+  .fs .picktitle{font-size:24px;}
+  .fs .streaknum{font-size:48px;}
 }
 @media (prefers-reduced-motion:reduce){
   .fs *, .fs *::before, .fs *::after{animation:none !important;transition:none !important;}
@@ -595,6 +593,10 @@ export default function FormSheet({ onSignOut }) {
     });
     return () => { alive = false; };
   }, []);
+
+  useEffect(() => {
+    try { window.scrollTo(0, 0); } catch { /* not available in tests */ }
+  }, [view]);
 
   const cfg = SPORTS[sport];
   const allMetrics = useMemo(() => cfg.metrics.filter((m) => m.bm[position]), [cfg, position]);
@@ -746,7 +748,7 @@ export default function FormSheet({ onSignOut }) {
         <style>{CSS}</style>
         <div className="wrap picker">
           <div className="pickhead">
-            <Logo width={230} />
+            <Logo width={210} panel={false} dark />
           </div>
           {loading ? (
             <p className="empty" style={{ textAlign: "center" }}>Loading…</p>
@@ -767,9 +769,10 @@ export default function FormSheet({ onSignOut }) {
                     style={{ "--tile": SPORT_COLOR[k] }}
                     onClick={() => pickSport(k)}
                   >
-                    <span className="sticon" aria-hidden="true">{SPORT_ICON[k]}</span>
+                    <span className="sticon"><Icon name={k} size={26} /></span>
                     <span className="stname">{s.label}</span>
                     {k === sport && sessions.length > 0 && <span className="stlast">Last played</span>}
+                    <span className="stchev"><Icon name="chevron" size={18} /></span>
                   </button>
                 ))}
               </div>
@@ -784,11 +787,11 @@ export default function FormSheet({ onSignOut }) {
   }
 
   const TABS = [
-    ["entry", "Log", "Log a match", "＋"],
-    ["progress", "Progress", "Progress", "📈"],
-    ["card", "Card", "My card", "🪪"],
-    ["technique", "Technique", "Technique", "🎥"],
-    ["training", "Training", "Training", "🔥"],
+    ["entry", "Log", "Log a match", "log"],
+    ["progress", "Progress", "Progress", "progress"],
+    ["card", "Profile", "Profile", "card"],
+    ["technique", "Technique", "Technique", "video"],
+    ["training", "Training", "Training", "training"],
   ];
 
   return (
@@ -796,11 +799,11 @@ export default function FormSheet({ onSignOut }) {
       <style>{CSS}</style>
       <div className="wrap">
         <header className="masthead">
-          <Logo width={230} />
+          <Logo width={170} panel={false} dark />
           <div className="mastright">
             {!loading && (
               <button className="streakchip" data-zero={streak.current ? 0 : 1} onClick={() => setView("training")}>
-                <span className="flame" aria-hidden="true">🔥</span>
+                <span className="flame"><Icon name="flame" size={16} /></span>
                 {streak.current ? `${streak.current}-day streak` : "Start your streak"}
               </button>
             )}
@@ -826,7 +829,7 @@ export default function FormSheet({ onSignOut }) {
         <nav className="bottombar" aria-label="Sections">
           {TABS.map(([k, short, , icon]) => (
             <button key={k} data-on={view === k || (k === "entry" && view === "report") ? 1 : 0} onClick={() => setView(k)}>
-              <span className="bbicon" aria-hidden="true">{icon}</span>
+              <span className="bbicon"><Icon name={icon} size={22} /></span>
               <span>{short}</span>
             </button>
           ))}
@@ -941,7 +944,7 @@ function Entry(props) {
   return (
     <>
       <div className="sportbar">
-        <span className="sbname"><span aria-hidden="true">{SPORT_ICON[sport]}</span> {cfg.label}</span>
+        <span className="sbname"><span className="sbicon"><Icon name={sport} size={22} /></span>{cfg.label}</span>
         <button className="sbchange" onClick={changeSport}>Change sport</button>
       </div>
       {lastReport && (
@@ -1050,35 +1053,25 @@ function CountNum({ value }) {
   return <>{useCountUp(value)}</>;
 }
 
-const CONFETTI = Array.from({ length: 28 }, (_, i) => {
-  const ang = (i / 28) * Math.PI * 2;
-  const dist = 140 + (i % 4) * 45;
-  return {
-    x: `${Math.round(Math.cos(ang) * dist * 1.6)}px`,
-    y: `${Math.round(Math.sin(ang) * dist * 0.6)}px`,
-    r: `${(i % 2 ? 1 : -1) * (180 + i * 23)}deg`,
-    c: ["#06122a", "#ffffff", "#ff8a2a", "#4aa8ff"][i % 4],
-    d: `${(i % 5) * 40}ms`,
-  };
-});
-
 function PersonalBest({ bests }) {
   const top = bests[0];
   return (
     <div className="pb" role="status">
-      <div className="confetti" aria-hidden="true">
-        {CONFETTI.map((c, i) => (
-          <span key={i} style={{ background: c.c, animationDelay: c.d, "--x": c.x, "--y": c.y, "--r": c.r }} />
-        ))}
-      </div>
-      <div className="shine" aria-hidden="true" />
-      <div className="big">New best: {top.label} {top.pct}</div>
-      <div className="small">
-        Up from {top.prev}
-        {bests.length > 1 && ` · plus ${bests.length - 1} more personal best${bests.length > 2 ? "s" : ""}`}
+      <div className="pbicon"><Icon name="trophy" size={24} /></div>
+      <div>
+        <div className="big">New personal best · <em>{top.label} {ordinal(top.pct)} percentile</em></div>
+        <div className="small">
+          Up from {ordinal(top.prev)}
+          {bests.length > 1 && ` · plus ${bests.length - 1} more personal best${bests.length > 2 ? "s" : ""} this match`}
+        </div>
       </div>
     </div>
   );
+}
+
+function RatingNum({ value }) {
+  const n = useCountUp(Math.round(value * 10));
+  return <>{(n / 10).toFixed(1)}</>;
 }
 
 function Report({ rec, cfg, sessions, onSave, onPlan }) {
@@ -1104,10 +1097,13 @@ function Report({ rec, cfg, sessions, onSave, onPlan }) {
       {bests.length > 0 && <PersonalBest key={rec.id} bests={bests} />}
 
       <div className="stamp">
-        <div className="stampnum"><CountNum value={rec.overall} /></div>
+        <div className="stampnum" data-r={ratingBand(matchRating(rec.overall))}><RatingNum value={matchRating(rec.overall)} /></div>
         <div>
-          <div className="stamptxt">Overall rank vs {LEVELS.find((l) => l.key === rec.level).label} {cfg.positions[rec.position]}</div>
-          <div className="stamptxt" style={{ marginTop: 4 }}>
+          <div className="stamptxt">Match rating</div>
+          <div className="stamptxt">
+            vs {LEVELS.find((l) => l.key === rec.level).label.toLowerCase()} {cfg.positions[rec.position].toLowerCase()}s · {ordinal(rec.overall)} percentile overall
+          </div>
+          <div className="stamptxt">
             {fmtDate(rec.date)} · {rec.minutes} {cfg.unitShort}
           </div>
         </div>
@@ -1325,7 +1321,7 @@ function Training({ sport, position, cfg, sessions, plans, onSave, focusHint, on
                 <span className="tag" data-t={s.type}>{s.type === "skill" ? "Technique" : "Fitness"}</span>
               </div>
               <button className="donebtn" data-on={done ? 1 : 0} onClick={() => toggleDone(i)}>
-                {done ? "Done ✓" : "Mark done"}
+                {done ? <><Icon name="check" size={16} />Done</> : "Mark done"}
               </button>
             </div>
             <div className="step"><b>Warm-up</b><span className="mins">10 min</span><div>{s.warmup}</div></div>
@@ -1427,9 +1423,9 @@ function CardView({ sport, sessions, plans, onSave, goLog }) {
   if (!card) {
     return (
       <section className="card">
-        <p className="eyebrow">My card</p>
-        <h2 className="h2">Unlock your {cfg.label} card</h2>
-        <p className="hint">Log and save one {cfg.label.toLowerCase()} match and your player card appears here, rated from your real stats.</p>
+        <p className="eyebrow">Player profile</p>
+        <h2 className="h2">Build your {cfg.label.toLowerCase()} profile</h2>
+        <p className="hint">Save one {cfg.label.toLowerCase()} match and your profile appears here: a rating out of 10 and a breakdown of your strengths, from your real stats.</p>
         <button className="go" onClick={goLog}>Log a match</button>
       </section>
     );
@@ -1443,7 +1439,7 @@ function CardView({ sport, sessions, plans, onSave, goLog }) {
   });
 
   function saveName() {
-    const n = name.trim().slice(0, 16);
+    const n = name.trim().slice(0, 18);
     if (n === saved) return;
     onSave({ ...plans, profile: { ...(plans.profile || {}), name: n } });
   }
@@ -1451,46 +1447,49 @@ function CardView({ sport, sessions, plans, onSave, goLog }) {
   async function share() {
     setStatus("");
     try {
-      const r = await saveCardImage(svg, `athletix-${sport}-card.png`);
+      const r = await saveCardImage(svg, `athletix-${sport}-profile.png`);
       setStatus(r === "downloaded" ? "Saved to your downloads." : r === "shared" ? "Shared." : "");
     } catch {
       setStatus("Couldn't create the image. Try again.");
     }
   }
 
+  const games = Math.min(card.matches, RECENT);
   return (
     <section className="card">
-      <p className="eyebrow">My card · {cfg.label} · last {Math.min(card.matches, RECENT)} {Math.min(card.matches, RECENT) === 1 ? "match" : "matches"}</p>
+      <p className="eyebrow">Player profile · {cfg.label} · last {games} {games === 1 ? "match" : "matches"}</p>
       <div className="cardgrid">
         <div>
-          <img className="cardimg" src={svgDataUrl(svg)} alt={`Player card: overall ${card.overall}, ${cfg.positions[card.position]}`} />
+          <img className="cardimg" src={svgDataUrl(svg)} alt={`Player profile: rating ${card.rating.toFixed(1)}, ${cfg.positions[card.position]}`} />
         </div>
         <div>
-          <h2 className="h2">Overall {card.overall}</h2>
+          <h2 className="h2">Rating {card.rating.toFixed(1)}</h2>
           <p className="hint">
             {card.delta === null
-              ? <>Your card updates every time you save a match.</>
+              ? <>Average of your recent matches. It updates every time you save one.</>
               : card.delta > 0
-                ? <><b>Up {card.delta}</b> since your last match. Keep it going.</>
+                ? <><b>Up {card.delta.toFixed(1)}</b> since your last match.</>
                 : card.delta < 0
-                  ? <><b>Down {Math.abs(card.delta)}</b> since your last match. One good game turns it around.</>
+                  ? <><b>Down {Math.abs(card.delta).toFixed(1)}</b> since your last match.</>
                   : <><b>No change</b> since your last match.</>}
-            {" "}{card.tier === "gold" ? "Gold card." : card.tier === "silver" ? `Silver card. Gold starts at 75.` : `Bronze card. Silver starts at 65.`}
+            {" "}7.0 is an average game at your level.
           </p>
           {card.attrs.map((a) => (
             <div className="attr" key={a.code}>
-              <b>{a.rating}</b>
               <span>{a.label}</span>
+              <div className="abar"><i style={{ width: `${a.rating}%`, background: BAND_COLOR[pctBand(a.rating)] }} /></div>
+              <b>{a.rating}</b>
               <em className={a.delta > 0 ? "up" : a.delta < 0 ? "down" : ""}>
                 {a.delta === undefined || a.delta === 0 ? "" : `${a.delta > 0 ? "+" : ""}${a.delta}`}
               </em>
             </div>
           ))}
+          <p className="hint" style={{ marginTop: 10 }}>Each number is your percentile against players in your role and level.</p>
           <div className="field namefield">
-            <label htmlFor="card-name">Name on card</label>
+            <label htmlFor="card-name">Name on profile</label>
             <input
               id="card-name"
-              maxLength={16}
+              maxLength={18}
               placeholder="Your name"
               value={name}
               onChange={(e) => setName(e.target.value)}
@@ -1498,7 +1497,9 @@ function CardView({ sport, sessions, plans, onSave, goLog }) {
               onKeyDown={(e) => { if (e.key === "Enter") e.currentTarget.blur(); }}
             />
           </div>
-          <button className="go" onClick={share}>Save or share card</button>
+          <button className="go" onClick={share} style={{ display: "inline-flex", alignItems: "center", gap: 8 }}>
+            <Icon name="share" size={18} />Save or share profile
+          </button>
           {status && <p className="hint" style={{ marginTop: 12 }}>{status}</p>}
         </div>
       </div>
@@ -1530,9 +1531,9 @@ function Tracker({ activity, today, streak, onMark }) {
         ))}
       </div>
       <div className="legend">
-        <span><i style={{ background: "var(--sport)" }} />Trained</span>
+        <span><i style={{ background: "var(--good)" }} />Trained</span>
         <span><i style={{ background: "var(--lime)" }} />Match</span>
-        <span><i style={{ background: "var(--raise)", border: "1px solid var(--soft)" }} />Rest day</span>
+        <span><i style={{ background: "#3a414c" }} />Rest day</span>
       </div>
       <p className="hint">
         {t === "match"
@@ -1592,13 +1593,13 @@ function Progress({ sessions, loading, goLog }) {
         <svg viewBox={`0 0 ${W} ${H}`} width="100%" role="img" aria-label="Overall rank over time">
           {[25, 50, 75].map((g) => (
             <g key={g}>
-              <line x1={PAD} x2={W - PAD} y1={Y(g)} y2={Y(g)} stroke="#26406e" strokeWidth="1" strokeDasharray="3 4" />
-              <text x={4} y={Y(g) + 4} fontSize="11" fill="#b4c3de" fontFamily="IBM Plex Mono, monospace">{g}</text>
+              <line x1={PAD} x2={W - PAD} y1={Y(g)} y2={Y(g)} stroke="#252a32" strokeWidth="1" strokeDasharray="3 4" />
+              <text x={4} y={Y(g) + 4} fontSize="11" fill="#6f7782" fontFamily="Inter, system-ui, sans-serif">{g}</text>
             </g>
           ))}
           <path d={line} fill="none" stroke="#c8ff3d" strokeWidth="3" />
           {pts.map((p, i) => (
-            <circle key={i} cx={X(i)} cy={Y(p.y)} r="5" fill="#07142b" stroke="#c8ff3d" strokeWidth="2" />
+            <circle key={i} cx={X(i)} cy={Y(p.y)} r="5" fill="#0b0d10" stroke="#c8ff3d" strokeWidth="2" />
           ))}
         </svg>
       </section>

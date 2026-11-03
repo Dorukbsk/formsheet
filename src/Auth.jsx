@@ -3,59 +3,45 @@ import Logo from './Logo.jsx'
 import { supabase } from './supabaseClient'
 
 const CSS = `
-@import url('https://fonts.googleapis.com/css2?family=Barlow+Condensed:ital,wght@0,600;0,700;0,800;1,800&family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Barlow+Condensed:wght@700&display=swap');
 
-body{background:#07142b;margin:0;}
+body{background:#0b0d10;margin:0;}
 .au {
-  --bg:#07142b; --card:#0f2347; --raise:#163262; --ink:#f2f5fa; --soft:#b4c3de;
-  --rule:#26406e; --lime:#c8ff3d; --bad:#ff6b5e; --good:#5ee08a; --on:#06122a;
+  --bg:#0b0d10; --card:#13161b; --raise:#1a1e25; --rule:#252a32; --rule2:#323844;
+  --ink:#eceef1; --soft:#a3abb6; --mute:#6f7782; --lime:#c8ff3d; --bad:#f2545b; --good:#3dd68c;
   background:var(--bg); color:var(--ink);
-  font-family:'IBM Plex Sans',system-ui,sans-serif;
+  font-family:'Inter',system-ui,-apple-system,'Segoe UI',sans-serif;
   min-height:100vh; display:flex; align-items:center; justify-content:center;
-  padding:max(24px, env(safe-area-inset-top)) 24px 24px; -webkit-font-smoothing:antialiased;
+  padding:max(24px, env(safe-area-inset-top)) 20px 24px; -webkit-font-smoothing:antialiased;
 }
 .au *{box-sizing:border-box;}
 .au .box{width:100%; max-width:400px;}
-.au .brand{display:flex;flex-direction:column;align-items:center;gap:14px;margin-bottom:22px;}
-.au .tagline{
-  font-family:'IBM Plex Mono',monospace; font-size:12px; letter-spacing:.12em;
-  text-transform:uppercase; color:var(--soft); text-align:center;
-}
-.au .sports{display:flex;gap:6px;justify-content:center;}
-.au .sports span{width:34px;height:5px;}
-.au .panel{background:var(--card); border:1px solid var(--rule); border-top:3px solid var(--lime); padding:24px;}
-.au h2{
-  font-family:'Barlow Condensed',sans-serif; font-size:32px; font-weight:800; font-style:italic;
-  text-transform:uppercase; margin:0 0 18px;
-}
-.au label{
-  display:block; font-family:'IBM Plex Mono',monospace; font-size:12px; font-weight:500;
-  letter-spacing:.08em; text-transform:uppercase; color:var(--soft); margin-bottom:6px;
-}
+.au .brand{display:flex;flex-direction:column;align-items:center;gap:12px;margin-bottom:28px;}
+.au .tagline{font-size:15px; color:var(--soft); text-align:center; margin:0;}
+.au .panel{background:var(--card); border:1px solid var(--rule); border-radius:18px; padding:26px;}
+.au h2{font-size:22px; font-weight:700; letter-spacing:-.01em; margin:0 0 20px;}
+.au label{display:block; font-size:13px; font-weight:500; color:var(--soft); margin-bottom:6px;}
 .au input{
-  width:100%; font-family:'IBM Plex Mono',monospace; font-size:16px;
-  padding:10px 12px; background:var(--bg); border:1px solid var(--rule);
-  color:var(--ink); margin-bottom:16px;
+  width:100%; font-family:inherit; font-size:16px; padding:12px 14px; background:var(--bg);
+  border:1px solid var(--rule2); border-radius:10px; color:var(--ink); margin-bottom:16px;
 }
-.au input:focus{outline:2px solid var(--lime); outline-offset:-1px; border-color:var(--lime);}
+.au input:focus{outline:none; border-color:var(--lime); box-shadow:0 0 0 3px rgba(200,255,61,.15);}
 .au button.go{
-  width:100%; font-family:'Barlow Condensed',sans-serif; font-size:23px;
-  font-weight:800; font-style:italic; text-transform:uppercase; letter-spacing:.05em;
-  padding:12px; background:var(--lime); color:var(--on); border:0; cursor:pointer;
-  transition:transform .12s, filter .12s;
+  width:100%; font-family:inherit; font-size:16px; font-weight:700; padding:13px;
+  background:var(--lime); color:#0b0d10; border:0; border-radius:12px; cursor:pointer; transition:filter .12s;
 }
-.au button.go:hover{filter:brightness(1.08); transform:translateY(-1px);}
-.au button.go:disabled{opacity:.5; cursor:wait; transform:none;}
+.au button.go:hover{filter:brightness(1.06);}
+.au button.go:disabled{opacity:.5; cursor:wait;}
 .au .switch{margin-top:18px; font-size:14px; color:var(--soft); text-align:center;}
 .au .switch button{
-  background:none; border:0; color:var(--lime); cursor:pointer; font-weight:600;
+  background:none; border:0; color:var(--ink); cursor:pointer; font-weight:600;
   font-size:14px; text-decoration:underline; padding:0; font-family:inherit;
 }
 .au .msg{
-  font-size:14px; line-height:1.5; padding:10px 12px; margin-bottom:16px;
-  border-left:4px solid var(--bad); background:var(--bg); color:var(--bad);
+  font-size:14px; line-height:1.5; padding:11px 14px; margin-bottom:16px; border-radius:10px;
+  border:1px solid rgba(242,84,91,.4); background:rgba(242,84,91,.1); color:#ffb3b6;
 }
-.au .msg[data-ok="1"]{border-left-color:var(--good); color:var(--good);}
+.au .msg[data-ok="1"]{border-color:rgba(61,214,140,.4); background:rgba(61,214,140,.1); color:#a8f0cb;}
 `
 
 export default function Auth() {
@@ -103,13 +89,8 @@ export default function Auth() {
       <style>{CSS}</style>
       <div className="box">
         <div className="brand">
-          <Logo width={340} />
-          <div className="sports" aria-hidden="true">
-            <span style={{ background: '#2bd46b' }} />
-            <span style={{ background: '#ff8a2a' }} />
-            <span style={{ background: '#4aa8ff' }} />
-          </div>
-          <p className="tagline">Know your game · fix what's costing you</p>
+          <Logo width={260} panel={false} dark />
+          <p className="tagline">Performance analysis for football, basketball and volleyball.</p>
         </div>
 
         <div className="panel">
