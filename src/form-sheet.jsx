@@ -216,6 +216,20 @@ function writeMode(m) {
 const defaultMinutes = (sport) => (sport === "volleyball" ? "4" : sport === "basketball" ? "30" : "90");
 
 const SPORT_COLOR = { football: "#2bd46b", basketball: "#ff8a2a", volleyball: "#4aa8ff" };
+const SPORT_ICON = { football: "⚽", basketball: "🏀", volleyball: "🏐" };
+
+function ordinal(n) {
+  const v = n % 100;
+  if (v >= 11 && v <= 13) return `${n}th`;
+  return `${n}${{ 1: "st", 2: "nd", 3: "rd" }[n % 10] || "th"}`;
+}
+
+const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+function fmtDate(iso) {
+  if (!iso || !/^\d{4}-\d{2}-\d{2}/.test(iso)) return iso || "";
+  const [y, m, d] = iso.slice(0, 10).split("-").map(Number);
+  return `${d} ${MONTHS[m - 1]}${y !== new Date().getFullYear() ? ` ${y}` : ""}`;
+}
 
 function useCountUp(target, ms = 800) {
   const [v, setV] = useState(0);
@@ -427,6 +441,38 @@ body{background:#07142b;margin:0;}
 @keyframes burst{0%{opacity:1;transform:translate(-50%,-50%) rotate(0);}
   100%{opacity:0;transform:translate(calc(-50% + var(--x)),calc(-50% + var(--y))) rotate(var(--r));}}
 
+/* ---- sport picker ---- */
+.fs .picker{max-width:560px;}
+.fs .pickhead{display:flex;justify-content:center;margin:12px 0 28px;}
+.fs .picktitle{font-family:var(--cond);font-size:40px;font-weight:800;font-style:italic;text-transform:uppercase;
+  text-align:center;margin:0 0 10px;line-height:1;}
+.fs .sporttiles{display:grid;grid-template-columns:minmax(0,1fr);gap:14px;margin-top:22px;}
+.fs .sporttile{position:relative;display:flex;align-items:center;gap:18px;width:100%;padding:22px 24px;
+  background:var(--card);border:2px solid var(--rule);border-left:8px solid var(--tile);cursor:pointer;color:var(--ink);
+  text-align:left;transition:transform .12s, border-color .12s, background .12s;}
+.fs .sporttile:hover,.fs .sporttile:focus-visible{border-color:var(--tile);background:var(--raise);transform:translateX(4px);outline:none;}
+.fs .sporttile:active{transform:scale(.98);}
+.fs .sporttile[data-last="1"]{border-color:var(--tile);}
+.fs .sticon{font-size:44px;line-height:1;}
+.fs .stname{min-width:0;font-family:var(--cond);font-size:36px;font-weight:800;font-style:italic;text-transform:uppercase;}
+.fs .stlast{position:absolute;top:10px;right:12px;font-family:var(--mono);font-size:11px;font-weight:600;letter-spacing:.08em;
+  text-transform:uppercase;background:var(--tile);color:var(--on-sport);padding:3px 8px;}
+
+/* ---- log page ---- */
+.fs .sportbar{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:16px;}
+.fs .sbname{font-family:var(--cond);font-size:30px;font-weight:800;font-style:italic;text-transform:uppercase;color:var(--sport);}
+.fs .sbchange{font-family:var(--cond);font-size:16px;font-weight:700;text-transform:uppercase;letter-spacing:.04em;
+  padding:7px 14px;background:transparent;color:var(--ink);border:2px solid var(--sport);cursor:pointer;}
+.fs .sbchange:hover{background:var(--sport);color:var(--on-sport);}
+.fs .rolegrid{display:grid;grid-template-columns:minmax(0,1.4fr) minmax(0,1fr);gap:20px;}
+
+.fs .pickfoot{text-align:center;margin-top:28px;}
+.fs .linkbtn{background:none;border:0;color:var(--soft);font-family:var(--sans);font-size:14px;text-decoration:underline;cursor:pointer;padding:6px;}
+.fs .linkbtn:hover{color:var(--ink);}
+
+/* ---- bottom tab bar (phones) ---- */
+.fs .bottombar{display:none;}
+
 /* ---- technique check ---- */
 .fs .tips{margin:0 0 14px;padding-left:20px;}
 .fs .tips li{font-size:15px;line-height:1.6;}
@@ -463,6 +509,27 @@ body{background:#07142b;margin:0;}
 .fs .ioshint button{background:none;border:0;color:var(--soft);font-size:20px;cursor:pointer;padding:0 4px;}
 
 @media (max-width:640px){
+  .fs{padding-bottom:calc(86px + env(safe-area-inset-bottom));}
+  .fs .tabs{display:none;}
+  .fs .bottombar{display:grid;grid-template-columns:repeat(5,1fr);position:fixed;left:0;right:0;bottom:0;z-index:40;
+    background:#0a1a36;border-top:2px solid var(--sport);padding:6px 4px calc(6px + env(safe-area-inset-bottom));}
+  .fs .bottombar button{display:flex;flex-direction:column;align-items:center;gap:2px;background:none;border:0;cursor:pointer;
+    color:var(--soft);font-family:var(--cond);font-size:11.5px;font-weight:700;text-transform:uppercase;letter-spacing:0;padding:6px 0;min-width:0;}
+  .fs .bottombar .bbicon{font-size:20px;line-height:1.1;filter:grayscale(1);opacity:.7;}
+  .fs .bottombar button[data-on="1"]{color:var(--sport);}
+  .fs .bottombar button[data-on="1"] .bbicon{filter:none;opacity:1;}
+  .fs .masthead{flex-wrap:nowrap;align-items:center;padding-bottom:10px;margin-bottom:18px;}
+  .fs .masthead svg{width:150px !important;height:auto !important;}
+  .fs .tagline{display:none;}
+  .fs .mastright{align-items:flex-end;gap:6px;}
+  .fs .streakchip{font-size:14px;padding:4px 9px;white-space:nowrap;}
+  .fs .sporttile{padding:18px 16px;gap:14px;}
+  .fs .sticon{font-size:36px;}
+  .fs .stname{font-size:30px;}
+  .fs .installbtn{font-size:13px;padding:4px 9px;}
+  .fs .rolegrid{grid-template-columns:1fr;gap:16px;}
+  .fs .picktitle{font-size:32px;}
+  .fs .sbname{font-size:26px;}
   .fs .cardgrid{grid-template-columns:1fr;}
   .fs .techgrid{grid-template-columns:1fr;}
   .fs .cardimg{margin:0 auto;}
@@ -483,8 +550,10 @@ body{background:#07142b;margin:0;}
 
 /* ---------- 6. UI ------------------------------------------ */
 
-export default function FormSheet() {
+export default function FormSheet({ onSignOut }) {
   const [view, setView] = useState("entry");
+  const [picked, setPicked] = useState(false);
+  const [entryError, setEntryError] = useState("");
   const [sport, setSport] = useState("football");
   const [position, setPosition] = useState("MID");
   const [level, setLevel] = useState("club");
@@ -518,13 +587,10 @@ export default function FormSheet() {
       if (!alive) return;
       setSessions(s);
       setPlans(p || {});
+      const prof = (p && p.profile) || {};
       const last = s[s.length - 1];
-      if (last && SPORTS[last.sport] && SPORTS[last.sport].positions[last.position]) {
-        setSport(last.sport);
-        setPosition(last.position);
-        if (LEVELS.some((l) => l.key === last.level)) setLevel(last.level);
-        applyPrefill(last.sport, last.position, s);
-      }
+      const start = SPORTS[prof.sport] ? prof.sport : last && SPORTS[last.sport] ? last.sport : "football";
+      setSport(start);
       setLoading(false);
     });
     return () => { alive = false; };
@@ -544,24 +610,69 @@ export default function FormSheet() {
     writeMode(m);
   }
 
+  function roleFor(k) {
+    const prof = plans.profile || {};
+    const mem = (prof.roles && prof.roles[k]) || {};
+    const last = [...sessions].reverse().find((x) => x.sport === k);
+    const pos = SPORTS[k].positions[mem.position] ? mem.position
+      : last && SPORTS[k].positions[last.position] ? last.position
+      : Object.keys(SPORTS[k].positions)[0];
+    const lvl = LEVELS.some((l) => l.key === mem.level) ? mem.level
+      : last && LEVELS.some((l) => l.key === last.level) ? last.level : "club";
+    return { pos, lvl };
+  }
+
   function switchSport(k) {
-    const pos = Object.keys(SPORTS[k].positions)[0];
+    const { pos, lvl } = roleFor(k);
     setSport(k);
     setPosition(pos);
+    setLevel(lvl);
     setReport(null);
+    setEntryError("");
     applyPrefill(k, pos, sessions);
+  }
+
+  function rememberRole(k, pos, lvl) {
+    const prof = plans.profile || {};
+    const roles = { ...(prof.roles || {}), [k]: { position: pos, level: lvl } };
+    updatePlans({ ...plans, profile: { ...prof, sport: k, roles } });
+  }
+
+  function pickSport(k) {
+    switchSport(k);
+    const { pos, lvl } = roleFor(k);
+    rememberRole(k, pos, lvl);
+    setPicked(true);
+    setView("entry");
+    if (typeof window !== "undefined" && window.scrollTo) { try { window.scrollTo(0, 0); } catch { /* jsdom */ } }
+  }
+
+  function changeLevel(l) {
+    setLevel(l);
+    rememberRole(sport, position, l);
   }
 
   function switchPosition(p) {
     setPosition(p);
+    setEntryError("");
     applyPrefill(sport, p, sessions);
+    rememberRole(sport, p, level);
   }
 
   function analyse() {
+    const entered = shownMetrics.filter((m) => raw[m.key] !== undefined && raw[m.key] !== "" && !isNaN(parseFloat(raw[m.key])));
+    if (!entered.length) {
+      setEntryError("Enter at least one stat from your match first.");
+      return;
+    }
+    if (!entered.some((m) => parseFloat(raw[m.key]) > 0)) {
+      setEntryError("All your stats are 0. Enter what you actually did in the match.");
+      return;
+    }
+    setEntryError("");
     const mins = parseFloat(minutes) || cfg.window;
-    const rows = shownMetrics.map((m) => {
-      const v = parseFloat(raw[m.key]);
-      const value = isNaN(v) ? 0 : v;
+    const rows = entered.map((m) => {
+      const value = parseFloat(raw[m.key]);
       const per = m.rate ? (value / mins) * cfg.window : value;
       const p = percentileFor(m, per, position, level);
       return { key: m.key, label: m.label, unit: m.unit || "", per: Math.round(per * 100) / 100, pct: p, band: band(p) };
@@ -629,6 +740,57 @@ export default function FormSheet() {
     setView("training");
   }
 
+  if (loading || !picked) {
+    return (
+      <div className="fs" style={{ "--sport": SPORT_COLOR[sport] }}>
+        <style>{CSS}</style>
+        <div className="wrap picker">
+          <div className="pickhead">
+            <Logo width={230} />
+          </div>
+          {loading ? (
+            <p className="empty" style={{ textAlign: "center" }}>Loading…</p>
+          ) : (
+            <>
+              <h1 className="picktitle">{sessions.length ? "What are you playing today?" : "Pick your sport"}</h1>
+              {!sessions.length && (
+                <p className="hint" style={{ textAlign: "center" }}>
+                  Log a match, see where you rank, and get a plan to fix your gaps.
+                </p>
+              )}
+              <div className="sporttiles" role="list">
+                {Object.entries(SPORTS).map(([k, s]) => (
+                  <button
+                    key={k}
+                    className="sporttile"
+                    data-last={k === sport && sessions.length ? 1 : 0}
+                    style={{ "--tile": SPORT_COLOR[k] }}
+                    onClick={() => pickSport(k)}
+                  >
+                    <span className="sticon" aria-hidden="true">{SPORT_ICON[k]}</span>
+                    <span className="stname">{s.label}</span>
+                    {k === sport && sessions.length > 0 && <span className="stlast">Last played</span>}
+                  </button>
+                ))}
+              </div>
+              {onSignOut && (
+                <p className="pickfoot"><button className="linkbtn" onClick={onSignOut}>Log out</button></p>
+              )}
+            </>
+          )}
+        </div>
+      </div>
+    );
+  }
+
+  const TABS = [
+    ["entry", "Log", "Log a match", "＋"],
+    ["progress", "Progress", "Progress", "📈"],
+    ["card", "Card", "My card", "🪪"],
+    ["technique", "Technique", "Technique", "🎥"],
+    ["training", "Training", "Training", "🔥"],
+  ];
+
   return (
     <div className="fs" style={{ "--sport": SPORT_COLOR[sport] }}>
       <style>{CSS}</style>
@@ -639,7 +801,7 @@ export default function FormSheet() {
             {!loading && (
               <button className="streakchip" data-zero={streak.current ? 0 : 1} onClick={() => setView("training")}>
                 <span className="flame" aria-hidden="true">🔥</span>
-                {streak.current}-day streak
+                {streak.current ? `${streak.current}-day streak` : "Start your streak"}
               </button>
             )}
             <InstallButton />
@@ -648,25 +810,26 @@ export default function FormSheet() {
         </header>
         <IosHint />
 
-        <nav className="tabs">
-          <button className="tab" data-on={view === "entry" ? 1 : 0} onClick={() => setView("entry")}>
-            <span>Log a match</span>
-          </button>
-          <button className="tab" data-on={view === "report" ? 1 : 0} disabled={!report} onClick={() => setView("report")}>
-            <span>Report</span>
-          </button>
-          <button className="tab" data-on={view === "progress" ? 1 : 0} onClick={() => setView("progress")}>
-            <span>Progress</span>
-          </button>
-          <button className="tab" data-on={view === "card" ? 1 : 0} onClick={() => setView("card")}>
-            <span>My card</span>
-          </button>
-          <button className="tab" data-on={view === "technique" ? 1 : 0} onClick={() => setView("technique")}>
-            <span>Technique</span>
-          </button>
-          <button className="tab" data-on={view === "training" ? 1 : 0} onClick={() => setView("training")}>
-            <span>Training</span>
-          </button>
+        <nav className="tabs" aria-label="Sections">
+          {TABS.map(([k, , long]) => (
+            <button key={k} className="tab" data-on={view === k ? 1 : 0} onClick={() => setView(k)}>
+              <span>{long}</span>
+            </button>
+          ))}
+          {report && (
+            <button className="tab" data-on={view === "report" ? 1 : 0} onClick={() => setView("report")}>
+              <span>Report</span>
+            </button>
+          )}
+        </nav>
+
+        <nav className="bottombar" aria-label="Sections">
+          {TABS.map(([k, short, , icon]) => (
+            <button key={k} data-on={view === k || (k === "entry" && view === "report") ? 1 : 0} onClick={() => setView(k)}>
+              <span className="bbicon" aria-hidden="true">{icon}</span>
+              <span>{short}</span>
+            </button>
+          ))}
         </nav>
 
         {error && <p className="err" role="alert">{error}</p>}
@@ -675,11 +838,13 @@ export default function FormSheet() {
           <Entry
             cfg={cfg}
             sport={sport}
-            switchSport={switchSport}
+            changeSport={() => setPicked(false)}
             position={position}
             setPosition={switchPosition}
             level={level}
-            setLevel={setLevel}
+            setLevel={changeLevel}
+            entryError={entryError}
+            lastReport={report && !report.saved ? () => setView("report") : null}
             minutes={minutes}
             setMinutes={setMinutes}
             metrics={shownMetrics}
@@ -698,7 +863,7 @@ export default function FormSheet() {
           <Report rec={report} cfg={SPORTS[report.sport]} sessions={sessions} onSave={saveReport} onPlan={planFromReport} />
         )}
 
-        {view === "progress" && <Progress sessions={sessions} loading={loading} />}
+        {view === "progress" && <Progress sessions={sessions} loading={loading} goLog={() => setView("entry")} />}
 
         {view === "technique" && (
           <Technique sport={sport} sports={SPORTS} sportColor={SPORT_COLOR[sport]} onSport={switchSport} />
@@ -732,6 +897,9 @@ export default function FormSheet() {
           numbers shipped here are placeholders — swap in real league data before you trust them for
           selection decisions.
         </p>
+        {onSignOut && (
+          <p className="pickfoot" style={{ textAlign: "left" }}><button className="linkbtn" onClick={onSignOut}>Log out</button></p>
+        )}
       </div>
     </div>
   );
@@ -766,42 +934,47 @@ function Stepper({ metric, value, onChange }) {
 
 function Entry(props) {
   const {
-    cfg, sport, switchSport, position, setPosition, level, setLevel, minutes, setMinutes,
-    metrics, totalCount, quickCount, mode, setMode, prefilled, raw, setRaw, analyse,
+    cfg, sport, changeSport, position, setPosition, level, setLevel, minutes, setMinutes,
+    metrics, totalCount, quickCount, mode, setMode, prefilled, raw, setRaw, analyse, entryError, lastReport,
   } = props;
   const canToggle = totalCount > quickCount;
   return (
     <>
-      <section className="card">
-        <p className="eyebrow">Step 1 — who is playing</p>
-        <h2 className="h2">Sport and role</h2>
-        <div className="chipset" style={{ marginBottom: 14 }}>
-          {Object.entries(SPORTS).map(([k, s]) => (
-            <button key={k} className="chip" data-on={sport === k ? 1 : 0} onClick={() => switchSport(k)}>
-              {s.label}
-            </button>
-          ))}
-        </div>
-        <div className="chipset" style={{ marginBottom: 14 }}>
-          {Object.entries(cfg.positions).map(([k, label]) => (
-            <button key={k} className="chip" data-on={position === k ? 1 : 0} onClick={() => setPosition(k)}>
-              {label}
-            </button>
-          ))}
-        </div>
-        <p className="eyebrow" style={{ marginTop: 18 }}>Compare me against</p>
-        <div className="chipset">
-          {LEVELS.map((l) => (
-            <button key={l.key} className="chip" data-on={level === l.key ? 1 : 0} onClick={() => setLevel(l.key)}>
-              {l.label}
-            </button>
-          ))}
-        </div>
-      </section>
+      <div className="sportbar">
+        <span className="sbname"><span aria-hidden="true">{SPORT_ICON[sport]}</span> {cfg.label}</span>
+        <button className="sbchange" onClick={changeSport}>Change sport</button>
+      </div>
+      {lastReport && (
+        <button className="go ghost" style={{ width: "100%", marginBottom: 16 }} onClick={lastReport}>
+          Back to your unsaved report
+        </button>
+      )}
 
       <section className="card">
-        <p className="eyebrow">Step 2 — the match</p>
-        <div className="rowhead">
+        <div className="rolegrid">
+          <div>
+            <p className="eyebrow">Your position</p>
+            <div className="chipset">
+              {Object.entries(cfg.positions).map(([k, label]) => (
+                <button key={k} className="chip sm" data-on={position === k ? 1 : 0} onClick={() => setPosition(k)}>
+                  {label}
+                </button>
+              ))}
+            </div>
+          </div>
+          <div>
+            <p className="eyebrow">Compare me against</p>
+            <div className="chipset">
+              {LEVELS.map((l) => (
+                <button key={l.key} className="chip sm" data-on={level === l.key ? 1 : 0} onClick={() => setLevel(l.key)}>
+                  {l.label}
+                </button>
+              ))}
+            </div>
+          </div>
+        </div>
+
+        <div className="rowhead" style={{ marginTop: 22 }}>
           <h2 className="h2">Enter your totals</h2>
           {canToggle && (
             <div className="chipset">
@@ -820,7 +993,9 @@ function Entry(props) {
               ? <><b>Quick log:</b> the stats that matter most for your role. Tap Full for everything.</>
               : <><b>Full log:</b> every stat for your role.</>
             : <><b>Your stats</b> for this role.</>}
-          {prefilled && <> Filled in from your last match, so change only what's different.</>}
+          {prefilled
+            ? <> Filled in from your last match, so change only what's different.</>
+            : <> Leave a box empty if you didn't track it.</>}
         </p>
         <div className="grid">
           <div className="field">
@@ -836,6 +1011,7 @@ function Entry(props) {
             </div>
           ))}
         </div>
+        {entryError && <p className="err" role="alert" style={{ marginTop: 18, marginBottom: 0 }}>{entryError}</p>}
         <button className="go" style={{ marginTop: 20 }} onClick={analyse}>
           Analyse this match
         </button>
@@ -932,7 +1108,7 @@ function Report({ rec, cfg, sessions, onSave, onPlan }) {
         <div>
           <div className="stamptxt">Overall rank vs {LEVELS.find((l) => l.key === rec.level).label} {cfg.positions[rec.position]}</div>
           <div className="stamptxt" style={{ marginTop: 4 }}>
-            {rec.date} · {rec.minutes} {cfg.unitShort}
+            {fmtDate(rec.date)} · {rec.minutes} {cfg.unitShort}
           </div>
         </div>
       </div>
@@ -951,7 +1127,7 @@ function Report({ rec, cfg, sessions, onSave, onPlan }) {
           <h2 className="h2">Your strengths</h2>
           {strengths.map((r) => (
             <div className="keep" key={r.key}>
-              <strong>{r.label} — {r.pct}th percentile</strong>
+              <strong>{r.label} — {ordinal(r.pct)} percentile</strong>
               <span>Better than roughly {r.pct}% of players in your role at this level. Build your game around it.</span>
             </div>
           ))}
@@ -969,7 +1145,7 @@ function Report({ rec, cfg, sessions, onSave, onPlan }) {
           if (!a) return null;
           return (
             <div className="fix" key={r.key}>
-              <h4>{r.label} — {r.pct}th percentile</h4>
+              <h4>{r.label} — {ordinal(r.pct)} percentile</h4>
               <p>{a.why}</p>
               <ul>
                 {a.drills.map((d, i) => (
@@ -1373,7 +1549,7 @@ function Tracker({ activity, today, streak, onMark }) {
   );
 }
 
-function Progress({ sessions, loading }) {
+function Progress({ sessions, loading, goLog }) {
   if (loading) return <section className="card"><p className="empty">Loading your record…</p></section>;
   if (!sessions.length)
     return (
@@ -1383,6 +1559,7 @@ function Progress({ sessions, loading }) {
           Log a match, then save the report. Once you have three or more entries the trend line
           below starts telling you whether your training is actually working.
         </p>
+        <button className="go" style={{ marginTop: 16 }} onClick={goLog}>Log a match</button>
       </section>
     );
 
@@ -1459,7 +1636,7 @@ function Progress({ sessions, loading }) {
           <tbody>
             {[...sessions].reverse().map((s) => (
               <tr key={s.id}>
-                <td>{s.date}</td>
+                <td>{fmtDate(s.date)}</td>
                 <td>{SPORTS[s.sport].label}</td>
                 <td>{SPORTS[s.sport].positions[s.position]}</td>
                 <td>{s.minutes} {SPORTS[s.sport].unitShort}</td>

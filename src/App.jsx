@@ -25,21 +25,5 @@ export default function App() {
   if (checking) return null
   if (!session) return <Auth />
 
-  return (
-    <div style={{ position: 'relative' }}>
-      <button
-        onClick={() => supabase.auth.signOut()}
-        style={{
-          position: 'fixed', top: 'max(14px, env(safe-area-inset-top))', right: 14, zIndex: 50,
-          fontFamily: "'Barlow Condensed', sans-serif", fontSize: 15,
-          fontWeight: 600, textTransform: 'uppercase', letterSpacing: '.05em',
-          padding: '5px 12px', background: '#0f2347', color: '#b4c3de',
-          border: '1px solid #26406e', cursor: 'pointer',
-        }}
-      >
-        Log out
-      </button>
-      <FormSheet />
-    </div>
-  )
+  return <FormSheet onSignOut={() => supabase.auth.signOut()} />
 }
