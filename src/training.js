@@ -23,7 +23,7 @@ export const QUICK = {
     OPP: ["kills", "hitEff", "blocksV", "aces", "serveErr"],
     MB: ["kills", "hitEff", "blocksV", "aces", "serveErr"],
     S: ["setAst", "digs", "aces", "serveErr", "blocksV"],
-    L: ["digs", "recep", "aces", "serveErr"],
+    L: ["digs", "recep"],
   },
 };
 
@@ -172,7 +172,10 @@ export function buildPlan({ sport, position, days, minutes, where, matchDay, foc
 
     return {
       day,
-      type: drills.length && drills.every((d) => d.type === "physical") ? "physical" : want,
+      // label the day by what most of its minutes are
+      type: drills.length
+        ? (drills.filter((d) => d.type === "physical").reduce((a, d) => a + d.mins, 0) * 2 >= drills.reduce((a, d) => a + d.mins, 0) ? "physical" : "skill")
+        : want,
       warmup: WARMUP[where],
       cooldown: COOLDOWN,
       drills: drills.map(({ name, detail, mins, metrics }) => ({ name, detail, mins, metrics })),

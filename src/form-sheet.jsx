@@ -5,6 +5,8 @@ import { QUICK, PLACES, DAYS, buildPlan, weekKey, localDay, addDays, streakInfo,
 import { buildCard, cardSvg, svgDataUrl, saveCardImage, RECENT, matchRating, ratingBand, pctBand, BAND_COLOR } from "./card.js";
 import Technique from "./Technique.jsx";
 import Icon from "./icons.jsx";
+import Team from "./Team.jsx";
+import { Account } from "./Privacy.jsx";
 
 /* ============================================================
    AthletiX — sport performance analyzer
@@ -78,8 +80,8 @@ const SPORTS = {
     metrics: [
       { key: "kills", label: "Kills", rate: true, bm: { OH: [3.2, 1.1], OPP: [3.6, 1.2], MB: [2.2, 0.9] } },
       { key: "hitEff", label: "Hitting efficiency", unit: "%", bm: { OH: [26, 7], OPP: [27, 7], MB: [36, 8] } },
-      { key: "aces", label: "Service aces", rate: true, bm: { OH: [0.25, 0.15], OPP: [0.28, 0.16], MB: [0.15, 0.1], S: [0.2, 0.12], L: [0.1, 0.08] } },
-      { key: "serveErr", label: "Service errors", rate: true, invert: true, bm: { OH: [0.35, 0.18], OPP: [0.38, 0.18], MB: [0.3, 0.16], S: [0.28, 0.15], L: [0.2, 0.12] } },
+      { key: "aces", label: "Service aces", rate: true, bm: { OH: [0.25, 0.15], OPP: [0.28, 0.16], MB: [0.15, 0.1], S: [0.2, 0.12] } },
+      { key: "serveErr", label: "Service errors", rate: true, invert: true, bm: { OH: [0.35, 0.18], OPP: [0.38, 0.18], MB: [0.3, 0.16], S: [0.28, 0.15] } },
       { key: "blocksV", label: "Blocks", rate: true, bm: { OH: [0.45, 0.2], OPP: [0.55, 0.25], MB: [0.9, 0.35], S: [0.4, 0.2] } },
       { key: "digs", label: "Digs", rate: true, bm: { OH: [1.6, 0.7], OPP: [1.0, 0.5], MB: [0.5, 0.3], S: [1.2, 0.6], L: [3.0, 1.0] } },
       { key: "recep", label: "Positive reception", unit: "%", bm: { OH: [48, 9], L: [55, 9] } },
@@ -174,13 +176,19 @@ function band(p) {
 
 /* ---------- 4. STORAGE (Supabase) -------------------------- */
 
+// Returns null when loading fails, so the app never mistakes a failed load for an empty account.
 async function loadSessions() {
+  // Only your own matches: coaches can also read their players' rows, so filter by your id.
+  const { data: s } = await supabase.auth.getSession();
+  const uid = s && s.session ? s.session.user.id : null;
+  if (!uid) return [];
   const { data, error } = await supabase
     .from("sessions")
     .select("payload")
+    .eq("user_id", uid)
     .order("created_at", { ascending: true });
-  if (error) { console.error(error); return []; }
-  return data.map((row) => row.payload);
+  if (error) { console.error(error); return null; }
+  return (data || []).map((row) => row.payload);
 }
 
 async function saveSessions(list) {
@@ -192,8 +200,8 @@ async function saveSessions(list) {
 
 async function loadPlans() {
   const { data, error } = await supabase.from("plans").select("payload").maybeSingle();
-  if (error) { console.error(error); return {}; }
-  return data ? data.payload : {};
+  if (error) { console.error(error); return null; }
+  return data ? data.payload || {} : {};
 }
 
 async function savePlans(plans) {
@@ -214,7 +222,13 @@ function writeMode(m) {
   try { localStorage.setItem("athletix:mode", m); } catch { /* ignore */ }
 }
 
-const defaultMinutes = (sport) => (sport === "volleyball" ? "4" : sport === "basketball" ? "30" : "90");
+// Ratings are scaled to a full game, so very short appearances would give silly numbers.
+const UNIT_LIMITS = {
+  football: { min: 15, max: 150, short: "Ratings need at least 15 minutes played to be fair.", long: "Check your minutes played. A football match is at most about 120 minutes." },
+  basketball: { min: 8, max: 70, short: "Ratings need at least 8 minutes played to be fair.", long: "Check your minutes played. A basketball game is at most about 60 minutes." },
+  volleyball: { min: 1, max: 5, short: "Enter at least 1 set played.", long: "A volleyball match has at most 5 sets." },
+};
+const defaultMinutes = (sport) => (sport === "volleyball" ? "3" : sport === "basketball" ? "30" : "90");
 
 const SPORT_COLOR = { football: "#2dd4bf", basketball: "#fb923c", volleyball: "#60a5fa" };
 
@@ -222,6 +236,11 @@ function ordinal(n) {
   const v = n % 100;
   if (v >= 11 && v <= 13) return `${n}th`;
   return `${n}${{ 1: "st", 2: "nd", 3: "rd" }[n % 10] || "th"}`;
+}
+
+// "Wing / Forward" -> "wings / forwards"
+function plural(label) {
+  return label.split(" / ").map((w) => `${w.toLowerCase()}s`).join(" / ");
 }
 
 const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
@@ -265,7 +284,7 @@ const CSS = `
 body{background:#0b0d10;margin:0;}
 .fs {
   --bg:#0b0d10; --card:#13161b; --raise:#1a1e25; --rule:#252a32; --rule2:#323844;
-  --ink:#eceef1; --soft:#a3abb6; --mute:#6f7782;
+  --ink:#eceef1; --soft:#a3abb6; --mute:#8a929d;
   --lime:#c8ff3d; --good:#3dd68c; --warn:#f5b841; --bad:#f2545b; --elite:#5b9dff;
   --on-sport:#0b0d10;
   --sans:'Inter',system-ui,-apple-system,'Segoe UI',sans-serif;
@@ -381,6 +400,61 @@ body{background:#0b0d10;margin:0;}
 .fs .up{color:var(--good);font-weight:600;} .fs .down{color:var(--bad);font-weight:600;}
 
 .fs .empty{font-size:15px;color:var(--soft);line-height:1.6;margin:0;}
+.fs .tcnote{font-size:12.5px;color:var(--mute);margin-top:2px;}
+.fs .notice{margin-top:12px;padding:12px 14px;border-radius:10px;background:var(--raise);border:1px solid var(--rule2);}
+.fs .notice p{margin:0 0 10px;font-size:14px;color:var(--soft);line-height:1.5;}
+.fs .chartwrap{width:100%;}
+.fs .sportnote{font-size:13.5px;color:var(--soft);margin:-4px 0 14px;}
+
+/* ---- team + account ---- */
+.fs .okmsg{font-size:14px;line-height:1.5;padding:11px 14px;margin:0 0 16px;border-radius:10px;
+  border:1px solid rgba(61,214,140,.4);background:rgba(61,214,140,.1);color:#a8f0cb;}
+.fs .teamgrid{display:grid;grid-template-columns:1fr 1fr;gap:16px;align-items:start;}
+.fs .teamgrid .card{margin-bottom:0;}
+.fs .tmrow{display:flex;align-items:center;justify-content:space-between;gap:14px;padding:12px 0;border-bottom:1px solid var(--rule);}
+.fs .tmrow:last-child{border-bottom:0;}
+.fs .tmname{font-size:16px;font-weight:700;}
+.fs .tmsub{font-size:13.5px;color:var(--soft);margin:2px 0 0;line-height:1.5;}
+.fs .tmhead{display:flex;justify-content:space-between;align-items:flex-start;gap:16px;margin-bottom:18px;}
+.fs .codebox{display:flex;flex-direction:column;align-items:center;gap:6px;background:var(--raise);border:1px solid var(--rule2);
+  border-radius:14px;padding:12px 16px;min-width:170px;}
+.fs .codelabel{font-size:11px;font-weight:600;letter-spacing:.08em;text-transform:uppercase;color:var(--mute);}
+.fs .codehint{font-size:11.5px;color:var(--mute);text-align:center;max-width:200px;line-height:1.4;}
+.fs .codeval{font-size:26px;font-weight:800;letter-spacing:.14em;color:var(--lime);font-variant-numeric:tabular-nums;}
+.fs .field input.codeinput{letter-spacing:.2em;text-transform:uppercase;font-size:20px;}
+.fs .tmempty{display:flex;gap:14px;align-items:center;}
+.fs .tmicon{display:flex;color:var(--mute);flex:none;}
+.fs .tmtiles{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;}
+.fs .tmtile{background:var(--raise);border:1px solid var(--rule);border-radius:12px;padding:12px 14px;display:flex;flex-direction:column;gap:2px;}
+.fs .tmtile b{font-size:24px;font-weight:800;font-variant-numeric:tabular-nums;}
+.fs .tmtile b[data-r="elite"]{color:var(--elite);} .fs .tmtile b[data-r="good"]{color:var(--good);}
+.fs .tmtile b[data-r="low"]{color:var(--warn);} .fs .tmtile b[data-r="gap"]{color:var(--bad);}
+.fs .tmtile span{font-size:12.5px;color:var(--soft);}
+.fs .roster{border-top:1px solid var(--rule);}
+.fs .prow{border-bottom:1px solid var(--rule);}
+.fs .phead{width:100%;display:flex;align-items:center;gap:12px;background:none;border:0;color:var(--ink);text-align:left;
+  padding:13px 2px;cursor:pointer;}
+.fs .phead:focus-visible{outline:2px solid var(--lime);outline-offset:2px;border-radius:8px;}
+.fs .pmain{flex:1;min-width:0;display:flex;flex-direction:column;}
+.fs .pname{font-size:15.5px;font-weight:600;}
+.fs .psub{font-size:13px;color:var(--soft);}
+.fs .psub[data-quiet="1"]{color:var(--warn);}
+.fs .pright{display:flex;align-items:center;gap:12px;font-size:13px;white-space:nowrap;}
+.fs .flat{color:var(--mute);}
+.fs .rpill{display:inline-block;min-width:46px;text-align:center;font-weight:800;font-size:15px;padding:5px 8px;border-radius:9px;
+  color:#0b0d10;background:#c3c9d1;font-variant-numeric:tabular-nums;}
+.fs .rpill.sm{min-width:40px;font-size:13px;padding:3px 6px;}
+.fs .rpill[data-r="elite"]{background:var(--elite);} .fs .rpill[data-r="good"]{background:var(--good);}
+.fs .rpill[data-r="low"]{background:var(--warn);} .fs .rpill[data-r="gap"]{background:var(--bad);}
+.fs .pchev{display:flex;color:var(--mute);transition:transform .15s;}
+.fs .prow[data-open="1"] .pchev{transform:rotate(90deg);}
+.fs .pdetail{padding:4px 2px 16px;}
+.fs .pcols{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:6px;}
+.fs .pstat{display:flex;justify-content:space-between;gap:10px;font-size:14px;margin:0 0 4px;}
+.fs .pstat span{color:var(--soft);}
+.fs .go.danger{background:var(--bad);color:#fff;}
+.fs .dangercard{border-color:rgba(242,84,91,.35);}
+.fs .pickfoot .linkbtn + .linkbtn{margin-left:14px;}
 .fs .note{font-size:12.5px;color:var(--mute);line-height:1.6;border-top:1px solid var(--rule);padding-top:14px;margin-top:24px;}
 
 .fs .rowhead{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-bottom:10px;}
@@ -496,6 +570,30 @@ body{background:#0b0d10;margin:0;}
 .fs .tcheck .drill{color:var(--ink);}
 .fs .tcheck .drill b{color:var(--lime);font-weight:600;}
 
+/* ---- video ---- */
+.fs .replay{position:relative;width:100%;background:#000;border-radius:12px;overflow:hidden;border:1px solid var(--rule2);}
+.fs .replay video{position:absolute;inset:0;width:100%;height:100%;object-fit:contain;display:block;}
+.fs .replay canvas{position:absolute;inset:0;width:100%;height:100%;pointer-events:none;}
+.fs .mtbar{display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;margin-top:10px;}
+.fs .mtvideo video{width:100%;max-height:62vh;display:block;background:#000;border-radius:12px;border:1px solid var(--rule2);}
+.fs .tagpad{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:8px;}
+.fs .tagbtn{display:flex;align-items:center;justify-content:space-between;gap:8px;min-height:52px;padding:10px 14px;
+  background:var(--raise);border:1px solid var(--rule2);border-radius:12px;color:var(--ink);font-size:14.5px;font-weight:600;
+  cursor:pointer;text-align:left;transition:background .1s,transform .08s;-webkit-tap-highlight-color:transparent;}
+.fs .tagbtn:hover{background:var(--rule2);}
+.fs .tagbtn:disabled{opacity:.4;cursor:not-allowed;transform:none;}
+.fs .tagbtn:active{transform:scale(.96);background:rgba(200,255,61,.16);border-color:rgba(200,255,61,.5);}
+.fs .tagbtn b{font-size:16px;font-variant-numeric:tabular-nums;color:var(--lime);}
+.fs .chip:disabled{opacity:.4;cursor:default;}
+.fs .taglist{max-height:360px;overflow-y:auto;border-top:1px solid var(--rule);}
+.fs .tagrow{display:flex;align-items:center;border-bottom:1px solid var(--rule);}
+.fs .tagjump{flex:1;display:flex;gap:14px;align-items:center;background:none;border:0;color:var(--ink);font-size:14.5px;
+  padding:11px 4px;cursor:pointer;text-align:left;}
+.fs .tagjump:hover{color:var(--lime);}
+.fs .tagtime{min-width:56px;color:var(--soft);font-variant-numeric:tabular-nums;}
+.fs .tagdel{background:none;border:0;color:var(--mute);font-size:20px;padding:6px 10px;cursor:pointer;}
+.fs .tagdel:hover{color:var(--bad);}
+
 /* ---- player profile ---- */
 .fs .cardgrid{display:grid;grid-template-columns:minmax(0,360px) minmax(0,1fr);gap:28px;align-items:start;}
 .fs .cardimg{width:100%;max-width:360px;display:block;border-radius:18px;animation:pbin .5s ease-out both;}
@@ -515,7 +613,7 @@ body{background:#0b0d10;margin:0;}
 @media (max-width:640px){
   .fs{padding-bottom:calc(86px + env(safe-area-inset-bottom));}
   .fs .tabs{display:none;}
-  .fs .bottombar{display:grid;grid-template-columns:repeat(5,1fr);position:fixed;left:0;right:0;bottom:0;z-index:40;
+  .fs .bottombar{display:grid;grid-template-columns:repeat(6,1fr);position:fixed;left:0;right:0;bottom:0;z-index:40;
     background:rgba(13,15,19,.94);backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px);border-top:1px solid var(--rule);
     padding:6px 4px calc(6px + env(safe-area-inset-bottom));}
   .fs .bottombar button{display:flex;flex-direction:column;align-items:center;gap:3px;background:none;border:0;cursor:pointer;
@@ -529,6 +627,15 @@ body{background:#0b0d10;margin:0;}
   .fs .card{padding:18px;border-radius:14px;}
   .fs .rolegrid{grid-template-columns:1fr;gap:16px;}
   .fs .cardgrid,.fs .techgrid{grid-template-columns:1fr;}
+  .fs .tagpad{grid-template-columns:1fr 1fr;}
+  .fs .teamgrid{grid-template-columns:1fr;}
+  .fs .tmhead{flex-direction:column;align-items:stretch;}
+  .fs .tmtiles{grid-template-columns:1fr 1fr;}
+  .fs .tmrow{flex-direction:column;align-items:flex-start;}
+  .fs .bottombar button{font-size:10.5px;}
+  .fs .mtvideo{position:sticky;top:0;z-index:5;background:var(--card);margin:0 -18px;padding:8px 18px;}
+  .fs .mtvideo video{max-height:36vh;}
+  .fs .tagbtn{min-height:56px;font-size:14px;}
   .fs .cardimg{margin:0 auto;}
   .fs .attr{grid-template-columns:1fr 80px 32px 36px;}
   .fs .rankrow{grid-template-columns:1fr auto 40px;grid-template-areas:"n v p" "s s s";row-gap:8px;}
@@ -558,24 +665,26 @@ export default function FormSheet({ onSignOut }) {
   const [minutes, setMinutes] = useState("90");
   const [raw, setRaw] = useState({});
   const [mode, setModeState] = useState(readMode);
-  const [prefilled, setPrefilled] = useState(false);
+  const [prefilled, setPrefilled] = useState(""); // "" | "last" | "video"
   const [report, setReport] = useState(null);
   const [sessions, setSessions] = useState([]);
   const [plans, setPlans] = useState({});
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [focusHint, setFocusHint] = useState(null);
+  const [loadFailed, setLoadFailed] = useState(false);
+  const [loadTry, setLoadTry] = useState(0);
 
   function applyPrefill(sp, pos, list) {
     const prev = [...list].reverse().find((x) => x.sport === sp && x.position === pos && x.raw);
     if (prev) {
       setRaw({ ...prev.raw });
       setMinutes(String(prev.minutes));
-      setPrefilled(true);
+      setPrefilled("last");
     } else {
       setRaw({});
       setMinutes(defaultMinutes(sp));
-      setPrefilled(false);
+      setPrefilled("");
     }
   }
 
@@ -583,6 +692,12 @@ export default function FormSheet({ onSignOut }) {
     let alive = true;
     Promise.all([loadSessions(), loadPlans()]).then(([s, p]) => {
       if (!alive) return;
+      if (s === null || p === null) {
+        // Stop here: carrying on would save an empty plan over the real one.
+        setLoadFailed(true);
+        return;
+      }
+      setLoadFailed(false);
       setSessions(s);
       setPlans(p || {});
       const prof = (p && p.profile) || {};
@@ -592,7 +707,7 @@ export default function FormSheet({ onSignOut }) {
       setLoading(false);
     });
     return () => { alive = false; };
-  }, []);
+  }, [loadTry]);
 
   useEffect(() => {
     try { window.scrollTo(0, 0); } catch { /* not available in tests */ }
@@ -629,7 +744,7 @@ export default function FormSheet({ onSignOut }) {
     setSport(k);
     setPosition(pos);
     setLevel(lvl);
-    setReport(null);
+    setReport((r) => (r && !r.saved ? r : null)); // never throw away a match you haven't saved
     setEntryError("");
     applyPrefill(k, pos, sessions);
   }
@@ -671,8 +786,35 @@ export default function FormSheet({ onSignOut }) {
       setEntryError("All your stats are 0. Enter what you actually did in the match.");
       return;
     }
+    const bad = entered.find((m) => {
+      const v = parseFloat(raw[m.key]);
+      return m.unit === "%" ? v > 100 || v < (m.key === "hitEff" ? -100 : 0) : v < 0;
+    });
+    if (bad) {
+      setEntryError(bad.unit === "%"
+        ? `${bad.label} has to be between ${bad.key === "hitEff" ? "-100" : "0"} and 100%.`
+        : `${bad.label} can't be negative.`);
+      return;
+    }
+    if (entered.length < 2 && shownMetrics.length >= 2) {
+      setEntryError("Enter at least 2 stats so your rating means something.");
+      return;
+    }
+    const mins = parseFloat(minutes);
+    const lim = UNIT_LIMITS[sport];
+    if (!(mins > 0)) {
+      setEntryError(`Enter ${cfg.unitLabel.toLowerCase()} first.`);
+      return;
+    }
+    if (mins < lim.min) {
+      setEntryError(lim.short);
+      return;
+    }
+    if (mins > lim.max) {
+      setEntryError(lim.long);
+      return;
+    }
     setEntryError("");
-    const mins = parseFloat(minutes) || cfg.window;
     const rows = entered.map((m) => {
       const value = parseFloat(raw[m.key]);
       const per = m.rate ? (value / mins) * cfg.window : value;
@@ -710,7 +852,7 @@ export default function FormSheet({ onSignOut }) {
     const rec = { ...report, saved: true };
     setReport(rec);
     setSessions((prev) => [...prev, rec]);
-    setPrefilled(true);
+    setPrefilled("last");
     setView("progress");
   }
 
@@ -735,11 +877,38 @@ export default function FormSheet({ onSignOut }) {
     updatePlans({ ...plans, activity: trimActivity(act, today) });
   }
 
+  function applyVideoStats(videoRaw, units) {
+    setRaw({ ...videoRaw });
+    setMinutes(units);
+    setModeState("full");
+    setPrefilled("video");
+    setEntryError("");
+    setReport(null);
+    setView("entry");
+  }
+
   function planFromReport(keys) {
     setSport(report.sport);
     setPosition(report.position);
     setFocusHint(keys);
     setView("training");
+  }
+
+  if (loadFailed) {
+    return (
+      <div className="fs">
+        <style>{CSS}</style>
+        <div className="wrap picker">
+          <div className="pickhead"><Logo width={210} panel={false} dark /></div>
+          <h1 className="picktitle">Couldn't load your data</h1>
+          <p className="hint" style={{ textAlign: "center" }}>Check your internet connection and try again. Nothing has been lost.</p>
+          <p style={{ textAlign: "center", marginTop: 20 }}>
+            <button className="go" onClick={() => { setLoadFailed(false); setLoadTry((n) => n + 1); }}>Try again</button>
+          </p>
+          {onSignOut && <p className="pickfoot"><button className="linkbtn" onClick={onSignOut}>Log out</button></p>}
+        </div>
+      </div>
+    );
   }
 
   if (loading || !picked) {
@@ -790,8 +959,9 @@ export default function FormSheet({ onSignOut }) {
     ["entry", "Log", "Log a match", "log"],
     ["progress", "Progress", "Progress", "progress"],
     ["card", "Profile", "Profile", "card"],
-    ["technique", "Technique", "Technique", "video"],
+    ["technique", "Video", "Video", "video"],
     ["training", "Training", "Training", "training"],
+    ["team", "Team", "Team", "team"],
   ];
 
   return (
@@ -815,7 +985,7 @@ export default function FormSheet({ onSignOut }) {
 
         <nav className="tabs" aria-label="Sections">
           {TABS.map(([k, , long]) => (
-            <button key={k} className="tab" data-on={view === k ? 1 : 0} onClick={() => setView(k)}>
+            <button key={k} className="tab" data-on={view === k ? 1 : 0} aria-current={view === k ? "page" : undefined} onClick={() => setView(k)}>
               <span>{long}</span>
             </button>
           ))}
@@ -828,7 +998,7 @@ export default function FormSheet({ onSignOut }) {
 
         <nav className="bottombar" aria-label="Sections">
           {TABS.map(([k, short, , icon]) => (
-            <button key={k} data-on={view === k || (k === "entry" && view === "report") ? 1 : 0} onClick={() => setView(k)}>
+            <button key={k} data-on={view === k || (k === "entry" && view === "report") ? 1 : 0} aria-current={view === k ? "page" : undefined} onClick={() => setView(k)}>
               <span className="bbicon"><Icon name={icon} size={22} /></span>
               <span>{short}</span>
             </button>
@@ -866,10 +1036,11 @@ export default function FormSheet({ onSignOut }) {
           <Report rec={report} cfg={SPORTS[report.sport]} sessions={sessions} onSave={saveReport} onPlan={planFromReport} />
         )}
 
-        {view === "progress" && <Progress sessions={sessions} loading={loading} goLog={() => setView("entry")} />}
+        {view === "progress" && <Progress sessions={sessions} sport={sport} loading={loading} goLog={() => setView("entry")} />}
 
         {view === "technique" && (
-          <Technique sport={sport} sports={SPORTS} sportColor={SPORT_COLOR[sport]} onSport={switchSport} />
+          <Technique sport={sport} sports={SPORTS} sportColor={SPORT_COLOR[sport]} position={position}
+            onSport={switchSport} onUseStats={applyVideoStats} />
         )}
 
         {view === "card" && (loading ? (
@@ -895,14 +1066,18 @@ export default function FormSheet({ onSignOut }) {
           />
         </>))}
 
+        {view === "team" && <Team sport={sport} sports={SPORTS} plans={plans} />}
+
+        {view === "account" && <Account onDeleted={onSignOut} />}
+
         <p className="note">
-          Percentiles compare you against a modelled distribution for your position and level. The
-          numbers shipped here are placeholders — swap in real league data before you trust them for
-          selection decisions.
+          Ratings compare your numbers with typical figures for your position and level. Use them as a guide for
+          training, not for team selection.
         </p>
-        {onSignOut && (
-          <p className="pickfoot" style={{ textAlign: "left" }}><button className="linkbtn" onClick={onSignOut}>Log out</button></p>
-        )}
+        <p className="pickfoot" style={{ textAlign: "left" }}>
+          <button className="linkbtn" onClick={() => setView("account")}>Account &amp; privacy</button>
+          {onSignOut && <button className="linkbtn" onClick={onSignOut}>Log out</button>}
+        </p>
       </div>
     </div>
   );
@@ -911,10 +1086,11 @@ export default function FormSheet({ onSignOut }) {
 function Stepper({ metric, value, onChange }) {
   const step = stepFor(metric);
   const max = metric.unit === "%" ? 100 : Infinity;
+  const min = metric.key === "hitEff" ? -100 : 0;
   const num = parseFloat(value);
   const cur = isNaN(num) ? 0 : num;
   function bump(d) {
-    const n = Math.min(max, Math.max(0, Math.round((cur + d) * 100) / 100));
+    const n = Math.min(max, Math.max(min, Math.round((cur + d) * 100) / 100));
     onChange(String(n));
   }
   return (
@@ -923,9 +1099,9 @@ function Stepper({ metric, value, onChange }) {
       <input
         type="number"
         inputMode="decimal"
-        min="0"
+        min={min}
         step="any"
-        placeholder="0"
+        placeholder="–"
         aria-label={metric.label}
         value={value ?? ""}
         onChange={(e) => onChange(e.target.value)}
@@ -959,7 +1135,7 @@ function Entry(props) {
             <p className="eyebrow">Your position</p>
             <div className="chipset">
               {Object.entries(cfg.positions).map(([k, label]) => (
-                <button key={k} className="chip sm" data-on={position === k ? 1 : 0} onClick={() => setPosition(k)}>
+                <button key={k} className="chip sm" data-on={position === k ? 1 : 0} aria-pressed={position === k} onClick={() => setPosition(k)}>
                   {label}
                 </button>
               ))}
@@ -969,7 +1145,7 @@ function Entry(props) {
             <p className="eyebrow">Compare me against</p>
             <div className="chipset">
               {LEVELS.map((l) => (
-                <button key={l.key} className="chip sm" data-on={level === l.key ? 1 : 0} onClick={() => setLevel(l.key)}>
+                <button key={l.key} className="chip sm" data-on={level === l.key ? 1 : 0} aria-pressed={level === l.key} onClick={() => setLevel(l.key)}>
                   {l.label}
                 </button>
               ))}
@@ -981,10 +1157,10 @@ function Entry(props) {
           <h2 className="h2">Enter your totals</h2>
           {canToggle && (
             <div className="chipset">
-              <button className="chip sm" data-on={mode === "quick" ? 1 : 0} onClick={() => setMode("quick")}>
+              <button className="chip sm" data-on={mode === "quick" ? 1 : 0} aria-pressed={mode === "quick"} onClick={() => setMode("quick")}>
                 Quick
               </button>
-              <button className="chip sm" data-on={mode === "full" ? 1 : 0} onClick={() => setMode("full")}>
+              <button className="chip sm" data-on={mode === "full" ? 1 : 0} aria-pressed={mode === "full"} onClick={() => setMode("full")}>
                 Full · {totalCount}
               </button>
             </div>
@@ -996,14 +1172,16 @@ function Entry(props) {
               ? <><b>Quick log:</b> the stats that matter most for your role. Tap Full for everything.</>
               : <><b>Full log:</b> every stat for your role.</>
             : <><b>Your stats</b> for this role.</>}
-          {prefilled
-            ? <> Filled in from your last match, so change only what's different.</>
-            : <> Leave a box empty if you didn't track it.</>}
+          {prefilled === "video"
+            ? <> <b>Filled in from your match video.</b> Check the numbers, add anything you couldn't tag, then analyse.</>
+            : prefilled
+              ? <> Filled in from your last match, so change only what's different.</>
+              : <> Leave a box empty if you didn't track it.</>}
         </p>
         <div className="grid">
           <div className="field">
-            <label>{cfg.unitLabel}</label>
-            <input type="number" inputMode="decimal" min="1" value={minutes} onChange={(e) => setMinutes(e.target.value)} />
+            <label htmlFor="log-units">{cfg.unitLabel}</label>
+            <input id="log-units" type="number" inputMode="decimal" min="1" value={minutes} onChange={(e) => setMinutes(e.target.value)} />
           </div>
           {metrics.map((m) => (
             <div className="field" key={m.key}>
@@ -1036,8 +1214,8 @@ function RankRow({ r, windowLabel, pb }) {
       </div>
       <div className="rval">
         {r.per}
-        {r.unit || ""}
-        {!r.unit && <span className="per"> {windowLabel}</span>}
+        {r.unit === "%" ? "%" : r.unit ? ` ${r.unit}` : ""}
+        {r.unit !== "%" && <span className="per"> {windowLabel}</span>}
       </div>
       <div className="scale">
         <span className="bar" data-b={r.band.key} style={{ width: `${n}%` }} />
@@ -1088,7 +1266,7 @@ function Report({ rec, cfg, sessions, onSave, onPlan }) {
     .sort((a, b) => (b.pct - b.prev) - (a.pct - a.prev));
   const pbKeys = new Set(bests.map((b) => b.key));
   const sorted = [...rec.rows].sort((a, b) => a.pct - b.pct);
-  const gaps = sorted.filter((r) => r.pct < 40).slice(0, 3);
+  const gaps = sorted.filter((r) => r.pct < 38).slice(0, 3);
   const strengths = [...sorted].reverse().filter((r) => r.pct >= 62).slice(0, 3);
   const planKeys = (gaps.length ? gaps : sorted.slice(0, 2)).map((r) => r.key);
 
@@ -1101,13 +1279,16 @@ function Report({ rec, cfg, sessions, onSave, onPlan }) {
         <div>
           <div className="stamptxt">Match rating</div>
           <div className="stamptxt">
-            vs {LEVELS.find((l) => l.key === rec.level).label.toLowerCase()} {cfg.positions[rec.position].toLowerCase()}s · {ordinal(rec.overall)} percentile overall
+            vs {LEVELS.find((l) => l.key === rec.level).label.toLowerCase()} {plural(cfg.positions[rec.position])} · {ordinal(rec.overall)} percentile overall
           </div>
           <div className="stamptxt">
             {fmtDate(rec.date)} · {rec.minutes} {cfg.unitShort}
           </div>
         </div>
       </div>
+      {!rec.saved && (
+        <button className="go" style={{ width: "100%", marginBottom: 16 }} onClick={onSave}>Save this match</button>
+      )}
 
       <section className="card">
         <p className="eyebrow">Every metric, ranked 1–99</p>
@@ -1134,7 +1315,7 @@ function Report({ rec, cfg, sessions, onSave, onPlan }) {
         <p className="eyebrow">Work on this next</p>
         <h2 className="h2">{gaps.length ? "Your fixes" : "No priority gaps"}</h2>
         {gaps.length === 0 && (
-          <p className="empty">Nothing fell below the 40th percentile this match. Raise the comparison level and run it again to find the next ceiling.</p>
+          <p className="empty">Nothing fell below your level this match. Raise the comparison level and run it again to find the next ceiling.</p>
         )}
         {gaps.map((r) => {
           const a = ADVICE[r.key];
@@ -1525,7 +1706,8 @@ function Tracker({ activity, today, streak, onMark }) {
       </div>
       <div className="days">
         {days.map((d) => (
-          <div key={d} className="dot" data-k={activity[d] || ""} data-today={d === today ? 1 : 0} title={d}>
+          <div key={d} className="dot" data-k={activity[d] || ""} data-today={d === today ? 1 : 0} title={d}
+            role="img" aria-label={`${fmtDate(d)}: ${{ train: "trained", match: "match", rest: "rest day" }[activity[d]] || "nothing logged"}`}>
             {Number(d.slice(8))}
           </div>
         ))}
@@ -1542,39 +1724,89 @@ function Tracker({ activity, today, streak, onMark }) {
       </p>
       {t !== "match" && (
         <div className="chipset">
-          <button className="chip" data-on={t === "train" ? 1 : 0} onClick={() => onMark("train")}>I trained today</button>
-          <button className="chip" data-on={t === "rest" ? 1 : 0} onClick={() => onMark("rest")}>Rest day</button>
+          <button className="chip" data-on={t === "train" ? 1 : 0} aria-pressed={t === "train"} onClick={() => onMark("train")}>I trained today</button>
+          <button className="chip" data-on={t === "rest" ? 1 : 0} aria-pressed={t === "rest"} onClick={() => onMark("rest")}>Rest day</button>
         </div>
       )}
     </section>
   );
 }
 
-function Progress({ sessions, loading, goLog }) {
+function useWidth(ref, fallback = 640) {
+  const [w, setW] = useState(fallback);
+  useEffect(() => {
+    const el = ref.current;
+    if (!el) return undefined;
+    const set = () => { if (el.clientWidth) setW(el.clientWidth); };
+    set();
+    if (typeof ResizeObserver === "undefined") return undefined;
+    const ro = new ResizeObserver(set);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, [ref]);
+  return w;
+}
+
+function TrendChart({ list }) {
+  const box = React.useRef(null);
+  const W = Math.max(260, useWidth(box));
+  const H = 230, L = 34, R = 14, T = 14, B = 34;
+  const lo = 4, hi = 10;
+  const pts = list.map((s) => ({ r: matchRating(s.overall), date: s.date }));
+  const step = pts.length > 1 ? (W - L - R) / (pts.length - 1) : 0;
+  const X = (i) => (pts.length > 1 ? L + i * step : (L + W - R) / 2);
+  const Y = (v) => T + (1 - (v - lo) / (hi - lo)) * (H - T - B);
+  const line = pts.map((p, i) => `${i ? "L" : "M"}${X(i).toFixed(1)},${Y(p.r).toFixed(1)}`).join(" ");
+  const maxLabels = Math.max(2, Math.floor((W - L - R) / 64));
+  const every = Math.max(1, Math.ceil(pts.length / maxLabels));
+  const F = "Inter, system-ui, sans-serif";
+  return (
+    <div className="chartwrap" ref={box}>
+      <svg viewBox={`0 0 ${W} ${H}`} width={W} height={H} role="img"
+        aria-label={`Match rating over your last ${pts.length} matches, latest ${pts.length ? pts[pts.length - 1].r.toFixed(1) : ""}`}>
+        {[5, 6, 7, 8, 9].map((g) => (
+          <g key={g}>
+            <line x1={L} x2={W - R} y1={Y(g)} y2={Y(g)} stroke={g === 7 ? "#4a525e" : "#252a32"} strokeWidth="1" strokeDasharray={g === 7 ? "0" : "3 4"} />
+            <text x={L - 8} y={Y(g) + 4} fontSize="12" fill="#8a929d" textAnchor="end" fontFamily={F}>{g}</text>
+          </g>
+        ))}
+        {pts.length > 1 && <path d={line} fill="none" stroke="#c8ff3d" strokeWidth="2.5" strokeLinejoin="round" />}
+        {pts.map((p, i) => (
+          <circle key={i} cx={X(i)} cy={Y(p.r)} r="5" fill={BAND_COLOR[ratingBand(p.r)]} stroke="#0b0d10" strokeWidth="2" />
+        ))}
+        {pts.map((p, i) => ((i % every === 0 || i === pts.length - 1) && (i === pts.length - 1 || pts.length - 1 - i >= every / 2) ? (
+          <text key={`d${i}`} x={X(i)} y={H - 10} fontSize="12" fill="#8a929d" textAnchor={pts.length > 1 && i === 0 ? "start" : pts.length > 1 && i === pts.length - 1 ? "end" : "middle"} fontFamily={F}>
+            {fmtDate(p.date)}
+          </text>
+        ) : null))}
+      </svg>
+    </div>
+  );
+}
+
+function Progress({ sessions, sport, loading, goLog }) {
   if (loading) return <section className="card"><p className="empty">Loading your record…</p></section>;
-  if (!sessions.length)
+  const cfg = SPORTS[sport];
+  const list = sessions.filter((s) => s.sport === sport && typeof s.overall === "number");
+  const others = Object.keys(SPORTS).filter((k) => k !== sport && sessions.some((s) => s.sport === k));
+
+  if (!list.length)
     return (
       <section className="card">
         <p className="eyebrow">Nothing logged yet</p>
         <p className="empty">
-          Log a match, then save the report. Once you have three or more entries the trend line
-          below starts telling you whether your training is actually working.
+          {others.length
+            ? `No ${cfg.label.toLowerCase()} matches yet. Log one, or change sport on the Log page to see your ${others.map((k) => SPORTS[k].label.toLowerCase()).join(" and ")} record.`
+            : "Log a match, then save the report. Once you have two or more matches, a trend line shows whether your training is working."}
         </p>
         <button className="go" style={{ marginTop: 16 }} onClick={goLog}>Log a match</button>
       </section>
     );
 
-  const pts = sessions.map((s, i) => ({ x: i, y: s.overall, date: s.date }));
-  const W = 880, H = 200, PAD = 28;
-  const step = pts.length > 1 ? (W - PAD * 2) / (pts.length - 1) : 0;
-  const X = (i) => PAD + i * step;
-  const Y = (v) => H - PAD - (v / 100) * (H - PAD * 2);
-  const line = pts.map((p, i) => `${i ? "L" : "M"}${X(i)},${Y(p.y)}`).join(" ");
-
-  const last = sessions[sessions.length - 1];
-  const prev = sessions.length > 1 ? sessions[sessions.length - 2] : null;
+  const last = list[list.length - 1];
+  const prev = list.length > 1 ? list[list.length - 2] : null;
   let movers = [];
-  if (prev && prev.sport === last.sport && prev.position === last.position) {
+  if (prev && prev.position === last.position) {
     movers = last.rows
       .map((r) => {
         const o = prev.rows.find((x) => x.key === r.key);
@@ -1588,29 +1820,22 @@ function Progress({ sessions, loading, goLog }) {
   return (
     <>
       <section className="card">
-        <p className="eyebrow">Overall rank across {sessions.length} logged {sessions.length === 1 ? "match" : "matches"}</p>
+        <p className="eyebrow">{cfg.label} · match rating · {list.length} {list.length === 1 ? "match" : "matches"}</p>
         <h2 className="h2">Trend</h2>
-        <svg viewBox={`0 0 ${W} ${H}`} width="100%" role="img" aria-label="Overall rank over time">
-          {[25, 50, 75].map((g) => (
-            <g key={g}>
-              <line x1={PAD} x2={W - PAD} y1={Y(g)} y2={Y(g)} stroke="#252a32" strokeWidth="1" strokeDasharray="3 4" />
-              <text x={4} y={Y(g) + 4} fontSize="11" fill="#6f7782" fontFamily="Inter, system-ui, sans-serif">{g}</text>
-            </g>
-          ))}
-          <path d={line} fill="none" stroke="#c8ff3d" strokeWidth="3" />
-          {pts.map((p, i) => (
-            <circle key={i} cx={X(i)} cy={Y(p.y)} r="5" fill="#0b0d10" stroke="#c8ff3d" strokeWidth="2" />
-          ))}
-        </svg>
+        {others.length > 0 && (
+          <p className="sportnote">Showing {cfg.label.toLowerCase()} only. Change sport on the Log page to see your {others.map((k) => SPORTS[k].label.toLowerCase()).join(" and ")} record.</p>
+        )}
+        <TrendChart list={list} />
+        <p className="hint" style={{ marginTop: 8 }}>Ratings run from 4 to 10. The solid line at 7 is a typical game at your level.</p>
       </section>
 
       {movers.length > 0 && (
         <section className="card">
-          <p className="eyebrow">Change since your previous match</p>
+          <p className="eyebrow">Change since your previous match · percentile</p>
           <h2 className="h2">Biggest movers</h2>
           <table>
             <thead>
-              <tr><th>Metric</th><th>Now</th><th>Change</th></tr>
+              <tr><th>Stat</th><th>Now</th><th>Change</th></tr>
             </thead>
             <tbody>
               {movers.map((m) => (
@@ -1632,18 +1857,20 @@ function Progress({ sessions, loading, goLog }) {
         <h2 className="h2">Match log</h2>
         <table>
           <thead>
-            <tr><th>Date</th><th>Sport</th><th>Role</th><th>Load</th><th>Rank</th></tr>
+            <tr><th>Date</th><th>Position</th><th>Played</th><th style={{ textAlign: "right" }}>Rating</th></tr>
           </thead>
           <tbody>
-            {[...sessions].reverse().map((s) => (
-              <tr key={s.id}>
-                <td>{fmtDate(s.date)}</td>
-                <td>{SPORTS[s.sport].label}</td>
-                <td>{SPORTS[s.sport].positions[s.position]}</td>
-                <td>{s.minutes} {SPORTS[s.sport].unitShort}</td>
-                <td>{s.overall}</td>
-              </tr>
-            ))}
+            {[...list].reverse().map((s) => {
+              const r = matchRating(s.overall);
+              return (
+                <tr key={s.id}>
+                  <td>{fmtDate(s.date)}</td>
+                  <td>{cfg.positions[s.position] || ""}</td>
+                  <td>{s.minutes} {cfg.unitShort}</td>
+                  <td style={{ textAlign: "right" }}><span className="rpill sm" data-r={ratingBand(r)}>{r.toFixed(1)}</span></td>
+                </tr>
+              );
+            })}
           </tbody>
         </table>
       </section>
